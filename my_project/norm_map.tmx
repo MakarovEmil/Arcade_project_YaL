@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<map version="1.10" tiledversion="1.11.2" orientation="orthogonal" renderorder="right-down" width="30" height="28" tilewidth="70" tileheight="70" infinite="0" backgroundcolor="#55aa00" nextlayerid="9" nextobjectid="3">
+ <tileset firstgid="1" source="../Карта к проекту arcade/city_factory.tsx"/>
+ <layer id="1" name="Main" width="30" height="28">
+  <data encoding="base64" compression="zlib">
+   eJztwwENAAAAwqAntX8Mi8DGqqmqqtoBC8U0gA==
+  </data>
+ </layer>
+ <layer id="4" name="Collisions" width="30" height="28">
+  <data encoding="base64" compression="zlib">
+   eJxjYBgFo2AUjIJRMAooA1aj9pIMQoFYjABmICBHrr0DAUbtHbV31N6ha2/yANnLRCNMCAAAFdkFxA==
+  </data>
+ </layer>
+ <layer id="5" name="hassasts" width="30" height="28">
+  <data encoding="base64" compression="zlib">
+   eJztwwENAAAMAiBD2T+bER7gsJEAAAD80OMAKmABoQ==
+  </data>
+ </layer>
+ <layer id="6" name="libres" width="30" height="28">
+  <data encoding="base64" compression="zlib">
+   eJztzUERAAAMAiCr2L+kLXZ7QAESAOCjer1er/fcAIFoAWw=
+  </data>
+ </layer>
+ <objectgroup id="8" name="Moving platforms">
+  <object id="2" gid="49" x="834.697" y="974.394" width="70" height="70">
+   <properties>
+    <property name="boundary_left" type="float" value="200"/>
+    <property name="boundary_right" type="float" value="900"/>
+    <property name="change_x" type="float" value="5"/>
+   </properties>
+  </object>
+ </objectgroup>
+</map>
