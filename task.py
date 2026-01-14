@@ -1,5 +1,6 @@
 import arcade
 import enum
+import random
 from arcade.gui import UIManager, UIFlatButton, UITextureButton, UILabel, UIInputText, UITextArea, UISlider, UIDropdown, \
     UIMessageBox  # Это разные виджеты
 from arcade.gui.widgets.layout import UIAnchorLayout, UIBoxLayout
@@ -15,7 +16,7 @@ LADDER_SPEED = 3
 
 CAMERA_LERP = 0.12
 TILE_SIZE = 70
-WORLD_W = TILE_SIZE * 30
+WORLD_W = TILE_SIZE * 53
 WORLD_H = TILE_SIZE * 28
 
 COYOTE_TIME = 0.08
@@ -109,6 +110,9 @@ class GameView(arcade.View):
         self.stable_grounded = False
         self.state_counter = 0
 
+        self.ladder_counter = 0
+        self.ground_counter = 0
+
         self.jump_buffer_timer = 0.0
         self.time_since_ground = 999.0
         self.jumps_left = MAX_JUMPS
@@ -116,9 +120,7 @@ class GameView(arcade.View):
         self.score = 0
         self.batch = Batch()
         self.text_info = arcade.Text("WASD/стрелки — ходьба/лестницы • SPACE — прыжок",
-                                     16, 16, arcade.color.GRAY, 14, batch=self.batch)
-
-        self.spawn_point = (280, 140)
+                                     16, 16, arcade.color.BLACK, 14, batch=self.batch)
 
         self.setup()
 
@@ -137,6 +139,13 @@ class GameView(arcade.View):
         self.ladders = self.tile_map.sprite_lists['libres']
         self.hazards = self.tile_map.sprite_lists['hassasts']
         self.main = self.tile_map.sprite_lists['Main']
+        self.spawn_layer = self.tile_map.sprite_lists['Spawn Layer']
+
+        self.valid_spawn_positions = []
+        for tile_sprite in self.spawn_layer:
+            spawn_x = tile_sprite.center_x
+            spawn_y = tile_sprite.top
+            self.valid_spawn_positions.append((spawn_x, spawn_y))
 
 
 
@@ -156,16 +165,22 @@ class GameView(arcade.View):
         self.stable_grounded = False
         self.state_counter = 0
 
+        self.ladder_counter = 0
+        self.ground_counter = 0
+
         self.reload_timer = 0
         self.reload_time = 0.5
 
-        self.bullet_list = arcade.SpriteList()
-
         self.enemy_list = arcade.SpriteList(use_spatial_hash=True)
-        self.enemy = Enemy_turret(20 * TILE_SIZE, 1 * TILE_SIZE + 47)
-        self.enemy.player_reference = self.player
-        self.enemy.wall_list = self.walls
-        self.enemy_list.append(self.enemy)
+        for _ in range(3):
+            center_x, center_y = self.get_valid_spawn_positions()
+            enemy = Enemy_turret(center_x, center_y)
+            enemy.player_reference = self.player
+            enemy.wall_list = self.walls
+            self.enemy_list.append(enemy)
+
+    def get_valid_spawn_positions(self):
+        return random.choice(self.valid_spawn_positions)
 
     def on_draw(self):
         self.clear()
@@ -175,9 +190,9 @@ class GameView(arcade.View):
         self.walls.draw()
         self.platforms.draw()
         self.ladders.draw()
-        self.hazards.draw()
+        #self.hazards.draw()
         self.player_list.draw()
-        self.bullet_list.draw()
+        self.player.bullet_list.draw()
         self.enemy_list.draw()
         for enemy in self.enemy_list:
             enemy.bullet_list.draw()
@@ -189,6 +204,12 @@ class GameView(arcade.View):
 
 
     def on_update(self, delta_time):
+
+        # ПРОВЕРКА СМЕРТИ ИГРОКА
+        if self.player.current_health <= 0:
+            self.player.current_health = self.player.health
+            self.player.center_x, self.player.center_y = self.player.spawn_point
+
 
         #АКТИВНОСТЬ ИГРОКА
 
@@ -246,7 +267,7 @@ class GameView(arcade.View):
         if self.jump_buffer_timer > 0:
             self.jump_buffer_timer -= delta_time
 
-        want_jump = self.jump_pressed or (self.jump_buffer_timer > 0)
+        want_jump = (self.jump_pressed or (self.jump_buffer_timer > 0)) and not on_ladder
 
         if want_jump:
             can_coyote = (self.time_since_ground <= COYOTE_TIME)
@@ -301,8 +322,9 @@ class GameView(arcade.View):
         self.reload_timer -= delta_time
         if (self.player.can_shoot and self.is_z_pressed and self.is_x_pressed and self.player.is_prepare_shooting
                 and self.reload_timer <= 0):
-            bullet = Bullet(self.player.center_x, self.player.center_y, self.player.face_direction, 45, 20)
-            self.bullet_list.append(bullet)
+            bullet = Bullet(self.player.center_x, self.player.center_y, self.player.face_direction, 45, 20,
+                            damage=self.player.damage)
+            self.player.bullet_list.append(bullet)
             self.player.can_shoot = False
             self.reload_timer = self.reload_time
             #self.player.center_x -= 10 #Доделать отдачу или убрать
@@ -339,13 +361,16 @@ class GameView(arcade.View):
 
         #ПРОВЕРКА СТОЛКНОВЕНИЙ
 
-        if arcade.check_for_collision_with_list(self.player, self.hazards):
-            if not self.player.invincible:
-                self.player.health -= 3
-                self.player.is_hurt = True
-                self.player.hurt_timer = 0
-                self.player.invincible = True
-                self.player.invincible_timer = 1.0
+        for hazard in self.hazards:
+            if (abs(hazard.top - self.player.bottom) < 10 and
+                    self.player.center_x - 10 < hazard.center_x < self.player.center_x + 10):
+                if not self.player.invincible:
+                    self.player.current_health -= 3
+                    self.player.is_hurt = True
+                    self.player.hurt_timer = 0
+                    self.player.invincible = True
+                    self.player.invincible_timer = 1.0
+
 
         # ОБНОВЛЕНИЕ ВРАГОВ И ПУЛЬ
         for enemy in self.enemy_list:
@@ -353,14 +378,23 @@ class GameView(arcade.View):
 
             bullets_hit = arcade.check_for_collision_with_list(self.player, enemy.bullet_list)
             if bullets_hit and not self.player.invincible:
-                self.player.health -= enemy.damage
                 self.player.is_hurt = True
                 self.player.hurt_timer = 0
                 self.player.invincible = True
                 self.player.invincible_timer = 1.0
 
                 for bullet in bullets_hit:
+                    self.player.current_health -= bullet.damage
                     bullet.remove_from_sprite_lists()
+
+            bullets_hit = arcade.check_for_collision_with_list(enemy, self.player.bullet_list)
+            if bullets_hit:
+                for bullet in bullets_hit:
+                    enemy.health -= bullet.damage
+                    bullet.remove_from_sprite_lists()
+
+            if enemy.health <= 0:
+                enemy.remove_from_sprite_lists()
 
             enemy.bullet_list.update()
             enemy.bullet_list.update_animation()
@@ -383,8 +417,8 @@ class GameView(arcade.View):
         self.player.update_animation(delta_time)
         self.enemy_list.update_animation(delta_time)
         self.enemy_list.update()
-        self.bullet_list.update()
-        self.bullet_list.update_animation()
+        self.player.bullet_list.update()
+        self.player.bullet_list.update_animation()
 
 
 
@@ -404,7 +438,7 @@ class GameView(arcade.View):
         self.gui_camera.position = (SCREEN_W / 2, SCREEN_H / 2)
 
         #ОБНОВЛЕНИЕ ТЕКСТОВЫХ ДАННЫХ НА ЭКРАНЕ
-        self.text_health = arcade.Text(f"Здоровье: {self.player.health}",
+        self.text_health = arcade.Text(f"Здоровье: {self.player.current_health}",
                                       16, SCREEN_H - 36, arcade.color.BLACK,
                                       20, batch=self.batch)
 
@@ -471,14 +505,17 @@ class FaceDirection(enum.Enum):
 
 class Player(arcade.Sprite):
     def __init__(self):
-        super().__init__(scale=2)
+        super().__init__('player/idle/idle-4.png', scale=2)
         self.center_x = 280
         self.center_y = 140
 
         self.walk_speed = 2
         self.run_speed = 5
 
-        self.health = 300
+        self.health = self.current_health = 300
+        self.spawn_point = (280, 140)
+        self.damage = 100
+        self.bullet_list = arcade.SpriteList()
 
         self.face_direction = FaceDirection.RIGHT
 
@@ -652,11 +689,12 @@ class Bullet(arcade.Sprite):
 
 
 class Enemy_turret(arcade.Sprite):
-    def __init__(self, center_x, center_y, damage=10):
+    def __init__(self, center_x, bottom_y, damage=10):
         super().__init__('misc/turret/turret-1.png', scale=4)
         self.center_x = center_x
-        self.center_y = center_y
+        self.center_y = bottom_y + self.height // 2
         self.damage = damage
+        self.health = 50
         self.detection_radius = 9 * TILE_SIZE
         self.player_reference = None
         self.wall_list = None
@@ -712,18 +750,192 @@ class Enemy_turret(arcade.Sprite):
                     self.attack_direction = FaceDirection.RIGHT
                 self.reload_timer -= delta_time
                 if self.reload_timer <= 0:
-                    bullet = Bullet(self.center_x, self.center_y, self.attack_direction, 45, 25)
+                    bullet = Bullet(self.center_x, self.center_y, self.attack_direction, 45, 25,
+                                    damage=self.damage)
                     self.bullet_list.append(bullet)
                     self.reload_timer = self.reload_time
         else:
             self.state = 'idle'
 
     def can_see_player(self):
-        if not self.player_reference or not self.wall_list:
-            return False
         return arcade.has_line_of_sight(observer=(self.center_x, self.center_y),
                                         target=(self.player_reference.center_x, self.player_reference.center_y),
                                         walls=self.wall_list)
+
+class Enemy_swordsman(arcade.Sprite):
+    def __init__(self, center_x, bottom_y, damage=10):
+        super().__init__('Free Swordsman Character/Animations/Idle/Idle_000.png', scale=1)
+        self.center_x = center_x
+        self.center_y = bottom_y + self.height // 2
+        self.damage = damage
+        self.health = self.current_health = 100
+        self.detection_radius = 13 * TILE_SIZE
+        self.player_reference = None
+        self.game_view = None
+        self.face_duration = FaceDirection.RIGHT
+
+        self.check_point = arcade.Sprite()
+        self.check_point.width = self.check_point.height = 4
+        self.check_point.visible = False
+
+        self.max_height_of_wall = 3 * TILE_SIZE
+        self.max_width_of_gap = 5 * TILE_SIZE
+
+        self.state = 'idle'
+        self.jump_type = None
+
+        self.speed = 10
+        self.wall_horizontal_jump_power = 20
+        self.gap_horizontal_jump_power = 40
+        self.jump_speed = 10
+        self.jump_distance_control = 0
+
+        self.idle_texture = arcade.load_texture(f'Free Swordsman Character/Animations/Idle/Idle_000.png')
+        self.texture = self.idle_texture
+
+        self.run_textures = []
+        for i in range(10):
+            texture = arcade.load_texture(f'Free Swordsman Character/Animations/Run/Run_00{i}.png')
+            self.run_textures.append(texture)
+
+        self.attack_1_textures = []
+        for i in range(10):
+            texture = arcade.load_texture(f'Free Swordsman Character/Animations/Attack/Attack_00{i}.png')
+            self.attack_1_textures.append(texture)
+
+        self.attack_2_textures = []
+        for i in range(9):
+            texture = arcade.load_texture(f'Free Swordsman Character/Animations/Attack 2/Attack 2_00{i}.png')
+            self.attack_2_textures.append(texture)
+
+        self.jumping_textures = []
+        for i in range(10):
+            texture = arcade.load_texture(f'Free Swordsman Character/Animations/Jump Start/Jump Start_00{i}.png')
+            self.jumping_textures.append(texture)
+
+        self.current_texture = 0
+        self.texture_change_time = 0
+        self.texture_change_delay = 0.1
+
+        self.check_timer = 0
+        self.check_interval = 0.5
+        self.can_see_player_cash = False
+
+    def update_animation(self, delta_time: float = 1 / 60):
+        if self.state == 'idle':
+            if self.face_duration == FaceDirection.RIGHT:
+                self.texture = self.idle_texture
+            elif self.face_duration == FaceDirection.LEFT:
+                self.texture = self.idle_texture.flip_horizontally()
+        elif self.state == 'attack_1':
+            self.texture_change_time += delta_time
+            if self.texture_change_time >= self.texture_change_delay:
+                self.texture_change_time = 0
+                self.current_texture += 1
+                if self.current_texture >= len(self.attack_1_textures):
+                    self.current_texture = 0
+                self.texture = self.attack_1_textures[self.current_texture]
+        elif self.state == 'attack_2':
+            self.texture_change_time += delta_time
+            if self.texture_change_time >= self.texture_change_delay:
+                self.texture_change_time = 0
+                self.current_texture += 1
+                if self.current_texture >= len(self.attack_2_textures):
+                    self.current_texture = 0
+                self.texture = self.attack_2_textures[self.current_texture]
+        elif self.state == 'running':
+            self.texture_change_time += delta_time
+            if self.texture_change_time >= self.texture_change_delay:
+                self.texture_change_time = 0
+                self.current_texture += 1
+                if self.current_texture >= len(self.run_textures):
+                    self.current_texture = 0
+                self.texture = self.run_textures[self.current_texture]
+        elif self.state == 'jumping':
+            self.texture_change_time += delta_time
+            if self.texture_change_time >= self.texture_change_delay:
+                self.texture_change_time = 0
+                self.current_texture += 1
+                if self.current_texture >= len(self.jumping_textures):
+                    self.current_texture = 0
+                self.texture = self.jumping_textures[self.current_texture]
+
+    def update(self, delta_time):
+        distance = arcade.get_distance_between_sprites(self, self.player_reference)
+        if distance <= self.detection_radius and abs(self.player_reference.center_y - self.center_y) <= 210:
+            self.check_timer += delta_time
+            if self.check_timer >= self.check_interval:
+                self.define_state()
+                self.check_timer = 0
+        else:
+            self.state = 'idle'
+
+        if self.state == 'idle':
+            self.change_x = self.change_y = 0
+        elif self.state == 'running':
+            direction = 1 if self.player_reference.center_x > self.center_x else -1
+            self.change_x = self.speed * direction
+            self.change_y = 0
+        elif self.state == 'jumping':
+            if self.jump_type == 'wall':
+                if self.jump_distance_control >= self.max_height_of_wall:
+                    self.change_y = -self.jump_speed
+                self.change_x = self.wall_horizontal_jump_power
+                self.change_y = self.jump_speed
+
+
+
+    def define_state(self):
+        can_see = arcade.has_line_of_sight(observer=(self.center_x, self.center_y),
+                                           target=(self.player_reference.center_x, self.player_reference.center_y),
+                                           walls=self.game_view.wall_list)
+        if not can_see:
+            self.state = 'idle'
+            return
+
+        direction = 1 if self.player_reference.center_x > self.center_x else -1
+        is_there_a_wall = arcade.has_line_of_sight(observer=(self.center_x, self.center_y),
+                                                   target=(self.center_x + direction * 30, self.center_y - 20),
+                                                   walls=self.game_view.wall_list)
+        if is_there_a_wall:
+            self.check_point.center_x = self.center_x + direction * 40
+            self.check_point.center_y = self.bottom + self.max_height_of_wall
+            if not arcade.check_for_collision_with_list(self.check_point, self.game_view.wall_list):
+                self.state = 'jumping'
+                self.jump_type = 'wall'
+                return
+            else:
+                self.state = 'idle'
+                return
+
+        self.check_point.center_x = self.center_x + direction * 40
+        self.check_point.center_y = self.bottom - 10
+        if arcade.check_for_collision_with_list(self.check_point, self.game_view.hazards):
+            if self.current_health <= self.health * 0.33:
+                self.state = 'idle'
+                return
+            else:
+                self.state = 'running'
+                return
+
+        is_there_a_gap = arcade.has_line_of_sight(observer=(self.center_x, self.center_y),
+                                                  target=(self.center_x + direction * 40, self.bottom - 20),
+                                                  walls=self.game_view.wall_list)
+        if is_there_a_gap:
+            self.check_point.center_x = self.center_x + direction * self.max_width_of_gap
+            self.check_point.center_y = self.bottom - 10
+            if not arcade.check_for_collision_with_list(self.check_point, self.game_view.wall_list):
+                self.state = 'jumping'
+                self.jump_type = 'gap'
+                return
+            else:
+                self.state = 'idle'
+                return
+        self.state = 'running'
+
+
+
+
 
 class PauseView(arcade.View):
     def __init__(self, game_view):
