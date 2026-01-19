@@ -105,7 +105,8 @@ class GameView(arcade.View):
         self.engine = None
 
         self.left = self.right = self.up = self.down = False
-        self.jump_pressed = self.is_ctrl_pressed = self.is_x_pressed = self.is_z_pressed = False
+        self.jump_pressed = self.is_ctrl_pressed = self.is_x_pressed = self.is_z_pressed = self.is_e_pressed = False
+        self.was_e_pressed = False
         self.stable_on_ladder = False
         self.stable_grounded = False
         self.state_counter = 0
@@ -171,13 +172,39 @@ class GameView(arcade.View):
         self.reload_timer = 0
         self.reload_time = 0.5
 
-        self.enemy_list = arcade.SpriteList(use_spatial_hash=True)
-        for _ in range(3):
+        self.enemy_turet_list = arcade.SpriteList(use_spatial_hash=True)
+        for _ in range(1):
             center_x, center_y = self.get_valid_spawn_positions()
             enemy = Enemy_turret(center_x, center_y)
             enemy.player_reference = self.player
             enemy.wall_list = self.walls
-            self.enemy_list.append(enemy)
+            self.enemy_turet_list.append(enemy)
+
+        self.enemy_swordsman_list = arcade.SpriteList(use_spatial_hash=True)
+        for _ in range(1):
+            center_x, center_y = self.get_valid_spawn_positions()
+            enemy = Enemy_swordsman(center_x, center_y)
+            enemy.player_reference = self.player
+            enemy.game_view = self
+            enemy.engine = arcade.PhysicsEnginePlatformer(
+                player_sprite=enemy,
+                gravity_constant=1,
+                walls=self.walls,
+                platforms=None,
+                ladders=None
+            )
+            self.enemy_swordsman_list.append(enemy)
+
+        self.package_list = arcade.SpriteList()
+        self.package = Package(self.player.center_x, self.player.center_y, 100)
+        self.package_engine = arcade.PhysicsEnginePlatformer(
+                player_sprite=self.package,
+                gravity_constant=5,
+                walls=self.walls,
+                platforms=None,
+                ladders=None
+            )
+        self.package_list.append(self.package)
 
     def get_valid_spawn_positions(self):
         return random.choice(self.valid_spawn_positions)
@@ -190,13 +217,16 @@ class GameView(arcade.View):
         self.walls.draw()
         self.platforms.draw()
         self.ladders.draw()
-        #self.hazards.draw()
         self.player_list.draw()
+        self.package_list.draw()
         self.player.bullet_list.draw()
-        self.enemy_list.draw()
-        for enemy in self.enemy_list:
+        self.enemy_turet_list.draw()
+        self.enemy_swordsman_list.draw()
+        for enemy in self.enemy_turet_list:
             enemy.bullet_list.draw()
-
+        for enemy in self.enemy_swordsman_list:
+            arcade.draw_point(enemy.check_point.center_x, enemy.check_point.center_y, arcade.color.BLACK, 10)
+            arcade.draw_line(enemy.x, enemy.y, enemy.test_gap_line_x, enemy.test_gap_line_y, arcade.color.BLACK)
 
         self.gui_camera.use()
         self.batch.draw()
@@ -359,6 +389,44 @@ class GameView(arcade.View):
             self.player.is_walking = False
             self.player.is_running = False
 
+        #ОБНОВЛЕНИЕ СОСТОЯНИЯ ПОСЫЛКИ И ОБНОВЛЕНИЕ ТАЙМЕРА
+        if self.package.abandoned_timer > 0:
+            self.package.abandoned_timer -= delta_time
+        else:
+            self.package.can_be_abandoned = True
+
+
+        print(f'raised:{self.package.is_raised}, lies:{self.package.is_lies}, abandoned:{self.package.is_abandoned}')
+        print(f'e_pressed:{self.is_e_pressed}')
+        print(f'can_be_abandoned:{self.package.can_be_abandoned}')
+        print(f'timer:{self.package.abandoned_timer}')
+        if self.is_e_pressed and not self.was_e_pressed:
+            if self.package.can_be_abandoned:
+                self.package.abandoned_timer = self.package.abandoned_time
+                self.package.can_be_abandoned = False
+                was_raised = self.package.is_raised
+                was_abandoned = self.package.is_abandoned
+                was_lies = self.package.is_lies
+                self.package.is_abandoned = self.package.is_raised = self.package.is_lies = False
+                if was_raised:
+                    if self.left or self.right:
+                        self.package.is_abandoned = True
+                        self.package.change_y = self.package.y_speed
+                        if self.left and not self.right:
+                            self.package.change_x = -self.package.x_speed
+                        elif self.right and not self.left:
+                            self.package.change_x = self.package.x_speed
+                    else:
+                        self.package.is_lies = True
+                elif (abs(self.player.center_x - self.package.center_x) <= self.package.raised_radius and
+                      abs(self.player.center_y - self.package.center_y) < 50
+                      and was_lies and not was_abandoned):
+                    self.package.is_raised = True
+        self.was_e_pressed = self.is_e_pressed
+
+
+
+
         #ПРОВЕРКА СТОЛКНОВЕНИЙ
 
         for hazard in self.hazards:
@@ -373,7 +441,7 @@ class GameView(arcade.View):
 
 
         # ОБНОВЛЕНИЕ ВРАГОВ И ПУЛЬ
-        for enemy in self.enemy_list:
+        for enemy in self.enemy_turet_list:
             enemy.player_reference = self.player
 
             bullets_hit = arcade.check_for_collision_with_list(self.player, enemy.bullet_list)
@@ -398,6 +466,15 @@ class GameView(arcade.View):
 
             enemy.bullet_list.update()
             enemy.bullet_list.update_animation()
+        for enemy in self.enemy_swordsman_list:
+            enemy.player_reference = self.player
+            bullets_hit = arcade.check_for_collision_with_list(enemy, self.player.bullet_list)
+            if bullets_hit:
+                for bullet in bullets_hit:
+                    enemy.current_health -= bullet.damage
+                    bullet.remove_from_sprite_lists()
+            if enemy.current_health <= 0:
+                enemy.remove_from_sprite_lists()
 
         # ОБНОВЛЕНИЕ ТАЙМЕРОВ ИГРОКА
         if self.player.is_hurt:
@@ -413,15 +490,27 @@ class GameView(arcade.View):
         # ОБНОВЛЕНИЕ ФИЗИКИ
         self.engine.update()
 
+        if self.package.is_lies or self.package.is_abandoned:
+            self.package_engine.update()
+            if self.package_engine.can_jump() and self.package.is_abandoned:
+                self.package.is_abandoned = False
+                self.package.is_lies = True
+                self.package.is_raised = False
+                self.package.change_x = 0
+                self.package.change_y = 0
+        elif self.package.is_raised:
+            self.package.center_x = self.player.center_x
+            self.package.center_y = self.player.center_y
+
+
         # АНИМАЦИИ
         self.player.update_animation(delta_time)
-        self.enemy_list.update_animation(delta_time)
-        self.enemy_list.update()
+        self.enemy_turet_list.update_animation(delta_time)
+        self.enemy_turet_list.update()
+        self.enemy_swordsman_list.update_animation(delta_time)
+        self.enemy_swordsman_list.update()
         self.player.bullet_list.update()
         self.player.bullet_list.update_animation()
-
-
-
 
         #КАМЕРА
         target = (self.player.center_x, self.player.center_y)
@@ -441,8 +530,6 @@ class GameView(arcade.View):
         self.text_health = arcade.Text(f"Здоровье: {self.player.current_health}",
                                       16, SCREEN_H - 36, arcade.color.BLACK,
                                       20, batch=self.batch)
-
-
 
     def reset_all_states(self):
         self.player.is_walking = False
@@ -473,7 +560,8 @@ class GameView(arcade.View):
             self.is_x_pressed = True
         if key == arcade.key.Z:
             self.is_z_pressed = True
-
+        if key == arcade.key.E:
+            self.is_e_pressed = True
 
     def on_key_release(self, key, modifiers):
         if key in (arcade.key.LCTRL, arcade.key.RCTRL):
@@ -496,6 +584,8 @@ class GameView(arcade.View):
             self.is_x_pressed = False
         if key == arcade.key.Z:
             self.is_z_pressed = False
+        if key == arcade.key.E:
+            self.is_e_pressed = False
 
 
 class FaceDirection(enum.Enum):
@@ -715,7 +805,7 @@ class Enemy_turret(arcade.Sprite):
         self.reload_time = 2.0
 
         self.check_timer = 0
-        self.check_interval = 0.5
+        self.check_interval = 1.5
         self.can_see_player_cash = False
 
         self.bullet_list = arcade.SpriteList()
@@ -764,19 +854,27 @@ class Enemy_turret(arcade.Sprite):
 
 class Enemy_swordsman(arcade.Sprite):
     def __init__(self, center_x, bottom_y, damage=10):
-        super().__init__('Free Swordsman Character/Animations/Idle/Idle_000.png', scale=1)
+        super().__init__('Free Swordsman Character/Animations/Idle/Idle_000.png', scale=0.2)
         self.center_x = center_x
         self.center_y = bottom_y + self.height // 2
         self.damage = damage
         self.health = self.current_health = 100
         self.detection_radius = 13 * TILE_SIZE
+        self.height_dif = 280
+        self.radius_of_attack = 1 * TILE_SIZE
         self.player_reference = None
         self.game_view = None
-        self.face_duration = FaceDirection.RIGHT
+        self.engine = None
+        self.face_direction = FaceDirection.RIGHT
 
         self.check_point = arcade.Sprite()
         self.check_point.width = self.check_point.height = 4
         self.check_point.visible = False
+
+        self.check_timer = 0
+        self.check_interval = 2.5
+
+        self.has_jumped = False
 
         self.max_height_of_wall = 3 * TILE_SIZE
         self.max_width_of_gap = 5 * TILE_SIZE
@@ -784,11 +882,10 @@ class Enemy_swordsman(arcade.Sprite):
         self.state = 'idle'
         self.jump_type = None
 
-        self.speed = 10
-        self.wall_horizontal_jump_power = 20
-        self.gap_horizontal_jump_power = 40
-        self.jump_speed = 10
-        self.jump_distance_control = 0
+        self.speed = 3
+        self.wall_horizontal_jump_power = 10
+        self.gap_horizontal_jump_power = 15
+        self.jump_speed = 25
 
         self.idle_texture = arcade.load_texture(f'Free Swordsman Character/Animations/Idle/Idle_000.png')
         self.texture = self.idle_texture
@@ -817,32 +914,37 @@ class Enemy_swordsman(arcade.Sprite):
         self.texture_change_time = 0
         self.texture_change_delay = 0.1
 
-        self.check_timer = 0
-        self.check_interval = 0.5
-        self.can_see_player_cash = False
+        self.reload_time = 1.5
+        self.reload_timer = 1.5
+        self.can_attack = False
+        self.jump_timer = 0
+
+        self.test_gap_line_x = self.test_gap_line_y = self.x = self.y = 0
 
     def update_animation(self, delta_time: float = 1 / 60):
         if self.state == 'idle':
-            if self.face_duration == FaceDirection.RIGHT:
+            if self.face_direction == FaceDirection.RIGHT:
                 self.texture = self.idle_texture
-            elif self.face_duration == FaceDirection.LEFT:
+            elif self.face_direction == FaceDirection.LEFT:
                 self.texture = self.idle_texture.flip_horizontally()
-        elif self.state == 'attack_1':
+        elif self.state.startswith('attack_'):
             self.texture_change_time += delta_time
             if self.texture_change_time >= self.texture_change_delay:
                 self.texture_change_time = 0
                 self.current_texture += 1
-                if self.current_texture >= len(self.attack_1_textures):
-                    self.current_texture = 0
-                self.texture = self.attack_1_textures[self.current_texture]
-        elif self.state == 'attack_2':
-            self.texture_change_time += delta_time
-            if self.texture_change_time >= self.texture_change_delay:
-                self.texture_change_time = 0
-                self.current_texture += 1
-                if self.current_texture >= len(self.attack_2_textures):
-                    self.current_texture = 0
-                self.texture = self.attack_2_textures[self.current_texture]
+                if self.state == 'attack_1':
+                    textures = self.attack_1_textures
+                else:  # 'attack_2'
+                    textures = self.attack_2_textures
+                if self.current_texture >= len(textures):
+                    if self.state.startswith('attack_'):
+                        self.state = 'idle'
+                        self.current_texture = 0
+                    return
+                if self.face_direction == FaceDirection.RIGHT:
+                    self.texture = textures[self.current_texture]
+                else:
+                    self.texture = textures[self.current_texture].flip_horizontally()
         elif self.state == 'running':
             self.texture_change_time += delta_time
             if self.texture_change_time >= self.texture_change_delay:
@@ -850,7 +952,10 @@ class Enemy_swordsman(arcade.Sprite):
                 self.current_texture += 1
                 if self.current_texture >= len(self.run_textures):
                     self.current_texture = 0
-                self.texture = self.run_textures[self.current_texture]
+                if self.face_direction == FaceDirection.RIGHT:
+                    self.texture = self.run_textures[self.current_texture]
+                elif self.face_direction == FaceDirection.LEFT:
+                    self.texture = self.run_textures[self.current_texture].flip_horizontally()
         elif self.state == 'jumping':
             self.texture_change_time += delta_time
             if self.texture_change_time >= self.texture_change_delay:
@@ -858,56 +963,100 @@ class Enemy_swordsman(arcade.Sprite):
                 self.current_texture += 1
                 if self.current_texture >= len(self.jumping_textures):
                     self.current_texture = 0
-                self.texture = self.jumping_textures[self.current_texture]
+                if self.face_direction == FaceDirection.RIGHT:
+                    self.texture = self.jumping_textures[self.current_texture]
+                elif self.face_direction == FaceDirection.LEFT:
+                    self.texture = self.jumping_textures[self.current_texture].flip_horizontally()
 
     def update(self, delta_time):
+        for hazard in self.game_view.hazards:
+            if (abs(hazard.top - self.bottom) < 10 and
+                    self.center_x - 10 < hazard.center_x < self.center_x + 10):
+                self.current_health -= 1
+        self.reload_timer -= delta_time
+        if self.reload_timer <= 0:
+            self.can_attack = True
+            self.reload_timer = self.reload_time
+        self.check_timer += delta_time
         distance = arcade.get_distance_between_sprites(self, self.player_reference)
-        if distance <= self.detection_radius and abs(self.player_reference.center_y - self.center_y) <= 210:
-            self.check_timer += delta_time
-            if self.check_timer >= self.check_interval:
-                self.define_state()
+        direction = self.get_stable_direction()
+
+        if self.state == 'jumping':
+            self.height_dif = 650
+        else:
+            self.height_dif = 280
+
+        if self.state.startswith('attack_'):
+            self.change_x = 0
+            in_range_x = abs(self.center_x - self.player_reference.center_x) <= self.radius_of_attack
+            in_range_y = abs(self.center_y - self.player_reference.center_y) < 50
+
+            if in_range_x and in_range_y and self.current_texture >= 3 and not self.player_reference.invincible:
+                self.player_reference.current_health -= self.damage
+                self.player_reference.is_hurt = True
+                self.player_reference.hurt_timer = 0
+                self.player_reference.invincible = True
+                self.player_reference.invincible_timer = 1.0
+            return
+        if distance <= self.detection_radius and abs(self.player_reference.center_y - self.center_y) <= self.height_dif:
+            if (self.state != 'jumping' and abs(self.center_x - self.player_reference.center_x) <= self.radius_of_attack
+                    and abs(self.center_y - self.player_reference.center_y) <= 20):
+                if self.can_attack:
+                    choosing_attack = random.choice([1, 2])
+                    self.state = f'attack_{choosing_attack}'
+                    self.change_x = 0
+                    self.can_attack = False
+                    self.current_texture = 0
+                    self.texture_change_time = 0
+                else:
+                    self.state = 'idle'
+            elif self.check_timer >= self.check_interval:
+                self.define_state(direction)
                 self.check_timer = 0
+
         else:
             self.state = 'idle'
 
         if self.state == 'idle':
-            self.change_x = self.change_y = 0
-        elif self.state == 'running':
-            direction = 1 if self.player_reference.center_x > self.center_x else -1
-            self.change_x = self.speed * direction
-            self.change_y = 0
+            self.change_x = 0
+
         elif self.state == 'jumping':
-            if self.jump_type == 'wall':
-                if self.jump_distance_control >= self.max_height_of_wall:
-                    self.change_y = -self.jump_speed
-                self.change_x = self.wall_horizontal_jump_power
-                self.change_y = self.jump_speed
+            self.jump_timer += delta_time
+            if not self.has_jumped:
+                self.execute_jump(direction)
+            if self.jump_timer > 0.4:
+                if self.engine.can_jump():
+                    self.state = 'running'
+                    self.has_jumped = False
+                    self.jump_timer = 0
+        elif self.state == 'running':
+            if direction != 0:
+                self.face_direction = FaceDirection.RIGHT if direction == 1 else FaceDirection.LEFT
+                self.change_x = self.speed * direction
+            else:
+                self.change_x = 0
+        self.engine.update()
 
-
-
-    def define_state(self):
-        can_see = arcade.has_line_of_sight(observer=(self.center_x, self.center_y),
-                                           target=(self.player_reference.center_x, self.player_reference.center_y),
-                                           walls=self.game_view.wall_list)
-        if not can_see:
-            self.state = 'idle'
+    def define_state(self, direction):
+        if self.state == 'jumping':
             return
-
-        direction = 1 if self.player_reference.center_x > self.center_x else -1
         is_there_a_wall = arcade.has_line_of_sight(observer=(self.center_x, self.center_y),
-                                                   target=(self.center_x + direction * 30, self.center_y - 20),
-                                                   walls=self.game_view.wall_list)
-        if is_there_a_wall:
-            self.check_point.center_x = self.center_x + direction * 40
-            self.check_point.center_y = self.bottom + self.max_height_of_wall
-            if not arcade.check_for_collision_with_list(self.check_point, self.game_view.wall_list):
-                self.state = 'jumping'
-                self.jump_type = 'wall'
-                return
+                                                   target=(self.center_x + direction * 70, self.center_y),
+                                                   walls=self.game_view.walls)
+        if not is_there_a_wall:
+            self.check_point.center_x = self.center_x + direction * 80
+            self.check_point.center_y = self.bottom + self.max_height_of_wall + 10
+            if not arcade.check_for_collision_with_list(self.check_point, self.game_view.walls):
+                if self.engine.can_jump():
+                    self.state = 'jumping'
+                    self.jump_type = 'wall'
+                    return
+                else:
+                    self.state = 'idle'
+                    return
             else:
                 self.state = 'idle'
                 return
-
         self.check_point.center_x = self.center_x + direction * 40
         self.check_point.center_y = self.bottom - 10
         if arcade.check_for_collision_with_list(self.check_point, self.game_view.hazards):
@@ -919,12 +1068,16 @@ class Enemy_swordsman(arcade.Sprite):
                 return
 
         is_there_a_gap = arcade.has_line_of_sight(observer=(self.center_x, self.center_y),
-                                                  target=(self.center_x + direction * 40, self.bottom - 20),
-                                                  walls=self.game_view.wall_list)
+                                                  target=(self.center_x + direction * 210, self.bottom - 10),
+                                                  walls=self.game_view.walls)
+        self.test_gap_line_x = self.center_x + direction * 210
+        self.test_gap_line_y = self.bottom - 10
+        self.x = self.center_x
+        self.y = self.center_y
         if is_there_a_gap:
-            self.check_point.center_x = self.center_x + direction * self.max_width_of_gap
+            self.check_point.center_x = self.center_x + direction * self.max_width_of_gap + 70
             self.check_point.center_y = self.bottom - 10
-            if not arcade.check_for_collision_with_list(self.check_point, self.game_view.wall_list):
+            if not arcade.check_for_collision_with_list(self.check_point, self.game_view.walls):
                 self.state = 'jumping'
                 self.jump_type = 'gap'
                 return
@@ -933,8 +1086,43 @@ class Enemy_swordsman(arcade.Sprite):
                 return
         self.state = 'running'
 
+    def get_stable_direction(self):
+        dx = self.player_reference.center_x - self.center_x
+        if abs(dx) < 15:
+            return 0
+        if abs(dx) > 30:
+            if dx > 0:
+                return 1
+            else:
+                return -1
+        return 1 if self.face_direction == FaceDirection.RIGHT else -1
+
+    def execute_jump(self, direction):
+        self.has_jumped = True
+        self.is_jumping_now = True
+
+        if self.jump_type == 'wall':
+            self.change_x = self.wall_horizontal_jump_power * direction
+            self.change_y = self.jump_speed
+        elif self.jump_type == 'gap':
+            self.change_x = self.gap_horizontal_jump_power * direction
+            self.change_y = self.jump_speed
 
 
+class Package(arcade.Sprite):
+    def __init__(self, center_x, center_y, health):
+        super().__init__('package_texture.png', scale=0.1)
+        self.center_x = center_x
+        self.center_y = center_y
+        self.health = health
+        self.is_lies = self.is_abandoned = False
+        self.is_raised = True
+        self.can_be_abandoned = False
+        self.x_speed = 25
+        self.y_speed = 50
+        self.raised_radius = TILE_SIZE * 0.8
+        self.abandoned_time = 2.0
+        self.abandoned_timer = 2.0
 
 
 class PauseView(arcade.View):
@@ -955,7 +1143,6 @@ class PauseView(arcade.View):
     def on_key_press(self, key, modifiers):
         if key == arcade.key.SPACE:
             self.window.show_view(self.game_view)
-
 
 
 if __name__ == "__main__":
