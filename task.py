@@ -1,18 +1,24 @@
 import arcade
 import enum
 import random
+import sqlite3
+from datetime import date
 from arcade.gui import UIManager, UIFlatButton, UITextureButton, UILabel, UIInputText, UITextArea, UISlider, UIDropdown, \
-    UIMessageBox  # Это разные виджеты
+    UIMessageBox, UIGridLayout
+
+from arcade.particles import FadeParticle, Emitter, EmitBurst, EmitInterval, EmitMaintainCount
 from arcade.gui.widgets.layout import UIAnchorLayout, UIBoxLayout
 from pyglet.graphics import Batch
 from arcade.camera import Camera2D
 
+SMOKE_TEX = arcade.make_soft_circle_texture(20, arcade.color.LIGHT_GRAY, 255, 80)
+PUFF_TEX = arcade.make_soft_circle_texture(12, arcade.color.WHITE, 255, 50)
+
 SCREEN_W = 1500
 SCREEN_H = 1000
-SCREEN_TITLE = "Аркадный Бегун"
+SCREEN_TITLE = "Курьер Хаоса"
 GRAVITY = 7
-JUMP_SPEED = 40
-LADDER_SPEED = 3
+
 
 CAMERA_LERP = 0.12
 TILE_SIZE = 70
@@ -21,9 +27,8 @@ WORLD_H = TILE_SIZE * 28
 
 COYOTE_TIME = 0.08
 JUMP_BUFFER = 0.12
-MAX_JUMPS = 1   #Добавить двойной прыжок
-JUMP_BACKWARD_SPEED = 8
-JUMP_FORWARD_SPEED = 8
+MAX_JUMPS = 1
+
 
 
 
@@ -31,7 +36,7 @@ JUMP_FORWARD_SPEED = 8
 class MenuView(arcade.View):
     def __init__(self):
         super().__init__()
-        self.background_texture = arcade.load_texture('buildings-bg.png')
+        self.background_texture = arcade.load_texture('Backgrounds/buildings-bg.png')
 
         self.manager = UIManager()
         self.manager.enable()
@@ -42,6 +47,7 @@ class MenuView(arcade.View):
         self.setup_widgets()
         self.anchor_layout.add(self.box_layout)
         self.manager.add(self.anchor_layout)
+
 
     def setup_widgets(self):
         name_of_game = UILabel(text="КУРЬЕР ХАОСА",
@@ -66,10 +72,12 @@ class MenuView(arcade.View):
         self.box_layout.add(registration_button)
 
     def authorization(self, event):
-        pass
+        authorization_view = AuthorizationView()
+        self.window.show_view(authorization_view)
 
     def registration(self, event):
-        pass
+        registration_view = RegistrationView()
+        self.window.show_view(registration_view)
 
     def on_draw(self):
         self.clear()
@@ -79,16 +87,438 @@ class MenuView(arcade.View):
                                                                            self.window.height))
         self.manager.draw()
 
-    def on_key_press(self, key, modifiers):
-        if key == arcade.key.SPACE:
-            game_view = GameView()
-            self.window.show_view(game_view)
+    def on_hide_view(self):
+        self.manager.disable()
+
+class AuthorizationView(arcade.View):
+    def __init__(self):
+        super().__init__()
+        self.background_texture = arcade.load_texture('Backgrounds/skyline-a.png')
+        self.con = sqlite3.connect('Chaos_Courier.sqlite')
+
+        self.manager = UIManager()
+        self.manager.enable()
+
+        self.anchor_layout = UIAnchorLayout()
+        self.grid = UIGridLayout(
+            column_count=2,
+            row_count=5,
+            vertical_spacing=15,
+            horizontal_spacing=20
+        )
+
+        self.setup_widgets()
+        self.anchor_layout.add(self.grid)
+        self.manager.add(self.anchor_layout)
+
+    def setup_widgets(self):
+        self.grid.add(
+            UILabel(text="Авторизация в 'Курьер Хаоса'", font_size=24, bold=True),
+            col_num=0, row_num=0,
+            col_span=2
+        )
+        self.user_name = UIInputText(width=250, height=40)
+        self.grid.add(UILabel(text="Имя игрока:", align="right"), 0, 1)
+        self.grid.add(self.user_name, 1, 1)
+
+        button_box = UIBoxLayout(vertical=False, space_between=30)
+        self.authorization_button = UIFlatButton(text="Авторизоваться", width=150)
+        self.cancel_button = UIFlatButton(text="Отмена", width=150)
+        button_box.add(self.authorization_button)
+        button_box.add(self.cancel_button)
+
+        self.authorization_button.on_click = self.get_authorization
+        self.cancel_button.on_click = self.get_cancel
+
+        self.grid.add(button_box, 0, 4, col_span=2)
+
+    def on_draw(self):
+        self.clear()
+        arcade.draw_texture_rect(self.background_texture, arcade.rect.XYWH(self.window.width // 2,
+                                                                           self.window.height // 2,
+                                                                           self.window.width,
+                                                                           self.window.height))
+        self.manager.draw()
+
+    def get_authorization(self, event):
+        user_name = self.user_name.text
+        with self.con:
+            cursor = self.con.cursor()
+            data = cursor.execute('''
+            SELECT username FROM Players WHERE username = ?
+            ''', (user_name,)).fetchall()
+            if not data:
+                message_box = UIMessageBox(
+                    width=300, height=200,
+                    message_text='Пользователь не найден',
+                    buttons=["OK"]
+                )
+                self.manager.add(message_box)
+            else:
+                main_view = MainView(user_name)
+                window.show_view(main_view)
+
+    def get_cancel(self, event):
+        menu_view = MenuView()
+        window.show_view(menu_view)
+
+    def on_hide_view(self):
+        self.manager.disable()
+
+class RegistrationView(arcade.View):
+    def __init__(self):
+        super().__init__()
+        self.background_texture = arcade.load_texture('Backgrounds/skyline-a.png')
+        self.con = sqlite3.connect('Chaos_Courier.sqlite')
+
+        self.manager = UIManager()
+        self.manager.enable()
+
+        self.anchor_layout = UIAnchorLayout()
+        self.grid = UIGridLayout(
+            column_count=2,
+            row_count=5,
+            vertical_spacing=15,
+            horizontal_spacing=20
+        )
+
+        self.setup_widgets()
+        self.anchor_layout.add(self.grid)
+        self.manager.add(self.anchor_layout)
+
+    def setup_widgets(self):
+        self.grid.add(
+            UILabel(text="Регистрация в 'Курьер Хаоса'", font_size=24, bold=True),
+            col_num=0, row_num=0,
+            col_span=2
+        )
+        self.user_name = UIInputText(width=250, height=40)
+        self.battle_cry = UIInputText(width=250, height=40)
+        self.grid.add(UILabel(text="Имя игрока:", align="right"), 0, 1)
+        self.grid.add(UILabel(text="Боевой клич", align="right"), 0, 2)
+
+        self.grid.add(self.user_name, 1, 1)
+        self.grid.add(self.battle_cry, 1, 2)
+
+        button_box = UIBoxLayout(vertical=False, space_between=30)
+        self.registration_button = UIFlatButton(text="Зарегистрировать", width=150)
+        self.cancel_button = UIFlatButton(text="Отмена", width=150)
+        button_box.add(self.registration_button)
+        button_box.add(self.cancel_button)
+
+        self.registration_button.on_click = self.get_registration
+        self.cancel_button.on_click = self.get_cancel
+
+        self.grid.add(button_box, 0, 4, col_span=2)
+
+    def on_draw(self):
+        self.clear()
+        arcade.draw_texture_rect(self.background_texture, arcade.rect.XYWH(self.window.width // 2,
+                                                                           self.window.height // 2,
+                                                                           self.window.width,
+                                                                           self.window.height))
+        self.manager.draw()
+
+    def get_registration(self, event):
+        user_name = self.user_name.text
+        battle_cry = self.battle_cry.text
+
+        is_valid, comment = self.validate_data(user_name, battle_cry)
+        if not is_valid:
+            message_box = UIMessageBox(
+                width=300, height=200,
+                message_text=comment,
+                buttons=["OK"]
+            )
+            self.manager.add(message_box)
+        else:
+            with self.con:
+                cursor = self.con.cursor()
+                cursor.execute('''
+                        INSERT INTO Players (username, battle_cry, first_seen_date, last_seen_date, 
+                        total_games_played, total_play_time_seconds, credits, damage, health)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (user_name, battle_cry, date.today(), date.today(), 0, 0, 50, 3, 50))
+                self.con.commit()
+            menu_view = MenuView()
+            window.show_view(menu_view)
+
+
+
+    def validate_data(self, name, battle_cry):
+        with self.con:
+            cursor = self.con.cursor()
+            if not name:
+                return False, 'Ошибка: Имя обязательно при регистрации'
+            if len(name) < 3:
+                return False, "Имя должно содержать минимум 3 символа"
+            if len(name) >= 15:
+                return False, 'Ошибка: Имя слишком длинное. Пожалуйста придумайте другое'
+            if len(battle_cry) >= 20:
+                return False, 'Ошибка: Боевой клич слишком длинный. Пожалуйста придумайте другой'
+            exist_name = cursor.execute("SELECT username FROM Players WHERE username = ?", (name,)).fetchone()
+            if exist_name is not None:
+                return False, 'Ошибка: Такое имя уже есть. Пожалуйста придумайте другое'
+            return True, ''
+
+    def get_cancel(self, event):
+        menu_view = MenuView()
+        window.show_view(menu_view)
+
+    def on_hide_view(self):
+        self.manager.disable()
+
+class MainView(arcade.View):
+    def __init__(self, username):
+        super().__init__()
+        self.con = sqlite3.connect('Chaos_Courier.sqlite')
+        self.cursor = self.con.cursor()
+        self.background_texture = arcade.load_texture('Backgrounds/near-buildings-bg.png')
+        self.modifiers = ["Толстокожие враги", "Скорострелы", "Бегуны", "Стеклянная челюсть",
+                          "Неуклюжесть", "Жажда наживы", "Туман"]
+        self.selected_modifiers = []
+        self.username = username
+
+        self.manager = UIManager()
+        self.manager.enable()
+
+        self.anchor_layout = UIAnchorLayout()
+        self.left_layout = UIBoxLayout(vertical=True, space_between=15)
+        self.right_layout = UIBoxLayout(vertical=True, space_between=15)
+        self.layout = UIBoxLayout(vertical=False, space_between=70)
+
+        self.setup_widgets()
+        self.anchor_layout.add(self.layout)
+        self.manager.add(self.anchor_layout)
+
+    def setup_widgets(self):
+        self.username_label = UILabel(font_size=24, bold=True)
+        self.battle_cry_label = UILabel(font_size=24, bold=True)
+        self.credits_label = UILabel(font_size=24, bold=True)
+        self.damage_label = UILabel(font_size=24, bold=True)
+        self.health_label = UILabel(font_size=24, bold=True)
+        self.total_games = UILabel(font_size=24, bold=True)
+        self.total_seconds = UILabel(font_size=24, bold=True)
+        self.load_data(self.username)
+        self.left_layout.add(self.username_label)
+        self.left_layout.add(self.battle_cry_label)
+        self.left_layout.add(UILabel(text="Модификаторы для игры", font_size=24, bold=True))
+        self.right_layout.add(self.total_games)
+        self.right_layout.add(self.total_seconds)
+        self.right_layout.add(self.credits_label)
+        self.right_layout.add(self.health_label)
+        self.right_layout.add(self.damage_label)
+        self.add_health_button = UIFlatButton(text='Увеличить здоровье (15 кредитов)', width=300)
+        self.add_health_button.on_click = self.add_health
+        self.right_layout.add(self.add_health_button)
+        self.add_damage_button = UIFlatButton(text='Увеличить урон (10 кредитов)', width=300)
+        self.add_damage_button.on_click = self.add_damage
+        self.right_layout.add(self.add_damage_button)
+        self.start_game_button = UIFlatButton(text='ИГРАТЬ', width=300)
+        self.start_game_button.on_click = self.start_game
+        self.right_layout.add(self.start_game_button)
+        self.cancel_button = UIFlatButton(text='Вернуть на главную', width=300)
+        self.cancel_button.on_click = self.get_cancel
+        self.right_layout.add(self.cancel_button)
+        for row, modifier in enumerate(self.modifiers):
+            button = UIFlatButton(text=modifier, width=300)
+            button.modifier_name = modifier
+            button.is_selected = False
+            button.on_click = self.turn_into_selected
+            self.left_layout.add(button)
+        self.layout.add(self.left_layout)
+        self.layout.add(self.right_layout)
+
+    def add_health(self, event):
+        current_health = int(self.health_label.text.split()[-1])
+        current_credits = int(self.credits_label.text.split()[-1])
+        if current_credits < 15:
+            message_box = UIMessageBox(
+                width=300, height=200,
+                message_text='Недостаточно кредитов',
+                buttons=["OK"]
+            )
+            self.manager.add(message_box)
+        else:
+            current_credits -= 15
+            current_health += 3
+            with self.con:
+                self.cursor.execute("UPDATE Players SET credits = ?, health = ? WHERE username = ?",
+                                    (current_credits, current_health, self.username))
+                self.con.commit()
+                self.load_data(self.username)
+
+    def add_damage(self, event):
+        current_damage = int(self.damage_label.text.split()[-1])
+        current_credits = int(self.credits_label.text.split()[-1])
+        if current_credits < 10:
+            message_box = UIMessageBox(
+                width=300, height=200,
+                message_text='Недостаточно кредитов',
+                buttons=["OK"]
+            )
+            self.manager.add(message_box)
+        else:
+            current_credits -= 10
+            current_damage += 2
+            with self.con:
+                self.cursor.execute("UPDATE Players SET credits = ?, damage = ? WHERE username = ?",
+                                    (current_credits, current_damage, self.username))
+                self.con.commit()
+                self.load_data(self.username)
+
+    def start_game(self, event):
+        if len(self.selected_modifiers) > 3:
+            message_box = UIMessageBox(
+                width=300, height=200,
+                message_text='Выбрано слишком много модификаторов',
+                buttons=["OK"]
+            )
+            self.manager.add(message_box)
+            return
+        current_health = int(self.health_label.text.split()[-1])
+        current_damage = int(self.damage_label.text.split()[-1])
+        if 'Стеклянная челюсть' in self.selected_modifiers:
+            current_health *= 0.6
+            current_damage *= 1.5
+        game_view = GameView(self.username, self.selected_modifiers, current_damage, current_health)
+        window.show_view(game_view)
+
+    def load_data(self, username):
+        with self.con:
+            data = self.cursor.execute('''
+                SELECT username, battle_cry, total_games_played, total_play_time_seconds, credits, damage, health
+                FROM Players WHERE username = ?
+                ''', (username,)).fetchone()
+            self.username_label.text = f"Курьер: {data[0]}"
+            self.battle_cry_label.text = f"Боевой клич: {data[1]}"
+            self.credits_label.text = f"Кредитов: {data[4]}"
+            self.damage_label.text = f"Урон: {data[5]}"
+            self.health_label.text = f"Здоровье: {data[6]}"
+            self.total_games.text = f"Сыграно игр: {data[2]}"
+            self.total_seconds.text = f"Общее время в игре: {data[3]:.2f}"
+
+
+    def turn_into_selected(self, event):
+        button = event.source
+
+        if not button.is_selected:
+            button.text = f"ВЫБРАНО: {button.modifier_name}"
+            if button.modifier_name not in self.selected_modifiers:
+                self.selected_modifiers.append(button.modifier_name)
+            button.is_selected = True
+        else:
+            if button.modifier_name in self.selected_modifiers:
+                self.selected_modifiers.remove(button.modifier_name)
+            button.text = button.modifier_name
+            button.is_selected = False
+
+    def on_draw(self):
+        self.clear()
+        arcade.draw_texture_rect(self.background_texture, arcade.rect.XYWH(self.window.width // 2,
+                                                                           self.window.height // 2,
+                                                                           self.window.width,
+                                                                           self.window.height))
+        self.manager.draw()
+
+    def on_hide_view(self):
+        self.manager.disable()
+
+    def get_cancel(self, event):
+        menu_view = MenuView()
+        window.show_view(menu_view)
+
+
+class End_game_view(arcade.View):
+    def __init__(self, username, total_time, reward_for_kills, greed_mod=False, success=True):
+        super().__init__()
+        self.background_texture = arcade.load_texture('Backgrounds/buildings-bg.png')
+        self.con = sqlite3.connect('Chaos_Courier.sqlite')
+        self.username, self.total_time, self.reward_for_kills, self.success, self.greed_mod = (username, total_time,
+                                                                                               reward_for_kills,
+                                                                                               success, greed_mod)
+        self.reward_for_delivery = self.calculate_reward_for_delivery(self.total_time, self.success, self.greed_mod)
+        self.cursor = self.con.cursor()
+        self.manager = UIManager()
+        self.manager.enable()
+        self.anchor_layout = UIAnchorLayout()
+        self.setup_widgets()
+        self.manager.add(self.anchor_layout)
+        self.update_data(username)
+
+    def calculate_reward_for_delivery(self, total_time, success, greed_mod):
+        reward = 0
+        if not success:
+            return reward
+        elif total_time <= 120:
+            reward = 15
+        elif total_time <= 180:
+            reward = 10
+        elif total_time <= 240:
+            reward = 5
+        elif total_time <= 300:
+            reward = 3
+        else:
+            reward = 0
+        return reward * 0.75 if greed_mod else reward
+
+    def setup_widgets(self):
+        self.layout = UIBoxLayout(vertical=True, space_between=15)
+        if self.success:
+            self.layout.add(UILabel(text='Поздравляем с успешной доставкой!', font_size=24, bold=True))
+        else:
+            self.layout.add(UILabel(text='К сожалению, доставка не получилась!', font_size=24, bold=True))
+        self.layout.add(UILabel(text=f'Игрок: {self.username}', font_size=24, bold=True))
+        self.layout.add(UILabel(text=f'Время доставки: {self.total_time:.2f}', font_size=24, bold=True))
+        self.layout.add(UILabel(text=f'Награда за убийства: {self.reward_for_kills}', font_size=24, bold=True))
+        self.layout.add(UILabel(text=f'Награда за доставку: {self.reward_for_delivery}', font_size=24, bold=True))
+        self.get_main_button = UIFlatButton(text='Вернуться в аккаунт', width=300)
+        self.get_main_button.on_click = self.get_main
+        self.layout.add(self.get_main_button)
+        self.anchor_layout.add(self.layout)
+
+    def update_data(self, username):
+        with self.con:
+            self.cursor.execute("UPDATE Players SET credits = credits + ? + ?, "
+                                "total_games_played = total_games_played + 1, "
+                                "total_play_time_seconds = total_play_time_seconds + ?, last_seen_date = ?"
+                                "WHERE username = ?",
+                                (self.reward_for_delivery, self.reward_for_kills, self.total_time, date.today(),
+                                 self.username))
+            self.con.commit()
+
+    def get_main(self, event):
+        main_view = MainView(self.username)
+        window.show_view(main_view)
+
+    def on_hide_view(self):
+        self.manager.disable()
+
+    def on_draw(self):
+        self.clear()
+        arcade.draw_texture_rect(self.background_texture, arcade.rect.XYWH(self.window.width // 2,
+                                                                           self.window.height // 2,
+                                                                           self.window.width,
+                                                                           self.window.height))
+        self.manager.draw()
+
+
 
 
 class GameView(arcade.View):
-    def __init__(self):
+    def __init__(self, username, modifiers, player_damage, player_health):
         super().__init__()
-        arcade.set_background_color(arcade.color.BLACK) #Добавить фон и музыку
+        arcade.set_background_color(arcade.color.BLACK)
+        self.background_music = arcade.load_sound("Sounds/cyber city 2-b.mp3")
+        self.shot_sound = arcade.load_sound("Sounds/beam.ogg")
+
+        self.modifiers = modifiers
+        self.reward_for_kills = 0
+        self.total_time_of_game = 0
+        self.username = username
+
+        self.greed_mod = 'Жажда наживы' in self.modifiers
+
 
         self.world_camera = Camera2D(
             viewport=arcade.rect.XYWH(SCREEN_W // 2, SCREEN_H // 2, SCREEN_W, SCREEN_H),
@@ -118,16 +548,23 @@ class GameView(arcade.View):
         self.time_since_ground = 999.0
         self.jumps_left = MAX_JUMPS
 
-        self.score = 0
         self.batch = Batch()
         self.text_info = arcade.Text("WASD/стрелки — ходьба/лестницы • SPACE — прыжок",
                                      16, 16, arcade.color.BLACK, 14, batch=self.batch)
+        self.particle_effects = []
 
-        self.setup()
+        self.setup(player_damage, player_health)
 
-    def setup(self):
+    def setup(self, player_damage, player_health):
         self.player_list.clear()
-        self.player = Player()
+        self.player = Player(damage=player_damage, health=player_health)
+        if 'Неуклюжесть' in self.modifiers:
+            self.player.ladder_speed *= 0.7
+            self.player.walk_speed *= 0.5
+            self.player.run_speed *= 0.5
+            self.player.jump_forward_speed *= 0.7
+            self.player.jump_backward_speed *= 0.7
+            self.player.jump_speed *= 1.4
         self.player_list.append(self.player)
 
         self.tile_map = arcade.load_tilemap(
@@ -141,6 +578,7 @@ class GameView(arcade.View):
         self.hazards = self.tile_map.sprite_lists['hassasts']
         self.main = self.tile_map.sprite_lists['Main']
         self.spawn_layer = self.tile_map.sprite_lists['Spawn Layer']
+        self.package_layer = self.tile_map.sprite_lists['Package_layer']
 
         self.valid_spawn_positions = []
         for tile_sprite in self.spawn_layer:
@@ -172,18 +610,37 @@ class GameView(arcade.View):
         self.reload_timer = 0
         self.reload_time = 0.5
 
+        print(self.modifiers)
         self.enemy_turet_list = arcade.SpriteList(use_spatial_hash=True)
-        for _ in range(1):
+        for _ in range(5):
             center_x, center_y = self.get_valid_spawn_positions()
-            enemy = Enemy_turret(center_x, center_y)
+            damage, health = int(self.player.damage * 1.2), int(self.player.health * 1.3)
+            enemy = Enemy_turret(center_x, center_y, damage=damage, health=health)
+            if 'Толстокожие враги' in self.modifiers:
+                enemy.health *= 2
+                enemy.reward_for_kill *= 1.2
+            if 'Скорострелы' in self.modifiers:
+                enemy.damage *= 0.7
+                enemy.reload_time //= 2
             enemy.player_reference = self.player
             enemy.wall_list = self.walls
             self.enemy_turet_list.append(enemy)
 
         self.enemy_swordsman_list = arcade.SpriteList(use_spatial_hash=True)
-        for _ in range(1):
+        for _ in range(5):
             center_x, center_y = self.get_valid_spawn_positions()
-            enemy = Enemy_swordsman(center_x, center_y)
+            damage, health = int(self.player.damage), int(self.player.health * 1.1)
+            enemy = Enemy_swordsman(center_x, center_y, damage=damage, health=health)
+            if 'Толстокожие враги' in self.modifiers:
+                enemy.health *= 2
+                enemy.current_health *= 2
+                enemy.reward_for_kill *= 1.2
+            if 'Скорострелы' in self.modifiers:
+                enemy.damage *= 0.7
+                enemy.reload_time //= 2
+                enemy.reload_timer //= 2
+            if 'Бегуны' in self.modifiers:
+                enemy.speed *= 1.5
             enemy.player_reference = self.player
             enemy.game_view = self
             enemy.engine = arcade.PhysicsEnginePlatformer(
@@ -206,6 +663,23 @@ class GameView(arcade.View):
             )
         self.package_list.append(self.package)
 
+    def create_spawn_effect(self, x, y):
+        spark_tex = arcade.make_soft_circle_texture(10, arcade.color.PASTEL_YELLOW)
+        explosion = Emitter(
+            center_xy=(x, y),
+            emit_controller=EmitBurst(80),
+            particle_factory=lambda e: FadeParticle(
+                filename_or_texture=spark_tex,
+                change_xy=arcade.math.rand_in_circle((0.0, 0.0), 7.0),
+                lifetime=random.uniform(0.5, 1.2),
+                start_alpha=255,
+                end_alpha=0,
+                scale=random.uniform(0.5, 0.8),
+            ),
+        )
+
+        self.particle_effects.append(explosion)
+
     def get_valid_spawn_positions(self):
         return random.choice(self.valid_spawn_positions)
 
@@ -224,9 +698,17 @@ class GameView(arcade.View):
         self.enemy_swordsman_list.draw()
         for enemy in self.enemy_turet_list:
             enemy.bullet_list.draw()
+            enemy.batch.draw()
         for enemy in self.enemy_swordsman_list:
             arcade.draw_point(enemy.check_point.center_x, enemy.check_point.center_y, arcade.color.BLACK, 10)
             arcade.draw_line(enemy.x, enemy.y, enemy.test_gap_line_x, enemy.test_gap_line_y, arcade.color.BLACK)
+            enemy.batch.draw()
+        if 'Туман' in self.modifiers:
+            arcade.draw_rect_filled(arcade.rect.XYWH(WORLD_W // 2, WORLD_H // 2, WORLD_W, WORLD_H),
+                                    (20, 20, 20, 200))
+
+        for effect in self.particle_effects:
+            effect.draw()
 
         self.gui_camera.use()
         self.batch.draw()
@@ -234,11 +716,36 @@ class GameView(arcade.View):
 
 
     def on_update(self, delta_time):
+        #ПРОВЕРКА ЗДОРОВЬЯ ПОСЫЛКИ
+        if self.package.current_health <= 0:
+            end_game_view = End_game_view(self.username, self.total_time_of_game, self.reward_for_kills,
+                                          greed_mod=self.greed_mod, success=False)
+            window.show_view(end_game_view)
+
+        self.total_time_of_game += delta_time
+
+        #ПРОВЕРКА ДОСТАВКИ ПОСЫЛКИ
+        if arcade.check_for_collision_with_list(self.package, self.package_layer) and self.package.current_health > 0:
+            end_game_view = End_game_view(self.username, self.total_time_of_game, self.reward_for_kills)
+            window.show_view(end_game_view)
+            return
 
         # ПРОВЕРКА СМЕРТИ ИГРОКА
         if self.player.current_health <= 0:
-            self.player.current_health = self.player.health
+            if self.package.is_raised:
+                self.package.is_lies = True
+                self.package.is_abandoned = self.package.is_raised = False
+                self.package.center_x, self.package.center_y = self.player.center_x, self.player.center_y
             self.player.center_x, self.player.center_y = self.player.spawn_point
+            self.create_spawn_effect(self.player.center_x, self.player.center_y)
+            self.player.current_health = self.player.health
+            return
+
+        #ОБНОВЛЕНИЕ ЧАСТИЦ
+        for effect in self.particle_effects[:]:
+            effect.update(delta_time)
+            if effect.can_reap():
+                self.particle_effects.remove(effect)
 
 
         #АКТИВНОСТЬ ИГРОКА
@@ -276,9 +783,9 @@ class GameView(arcade.View):
         # Лестницы
         if self.player.is_climbing:
             if self.up and not self.down:
-                self.player.change_y = LADDER_SPEED
+                self.player.change_y = self.player.ladder_speed
             elif self.down and not self.up:
-                self.player.change_y = -LADDER_SPEED
+                self.player.change_y = -self.player.ladder_speed
         else:
             self.player.change_y = 0
 
@@ -333,18 +840,18 @@ class GameView(arcade.View):
 
                 if self.player.is_jumping_forward:
                     if self.player.face_direction == FaceDirection.RIGHT:
-                        self.player.jump_horizontal_speed = JUMP_FORWARD_SPEED
+                        self.player.jump_horizontal_speed = self.player.jump_forward_speed
                     else:
-                        self.player.jump_horizontal_speed = -JUMP_FORWARD_SPEED
+                        self.player.jump_horizontal_speed = -self.player.jump_forward_speed
                 elif self.player.is_jumping_backward:
                     if self.player.face_direction == FaceDirection.RIGHT:
-                        self.player.jump_horizontal_speed = -JUMP_BACKWARD_SPEED
+                        self.player.jump_horizontal_speed = -self.player.jump_backward_speed
                     else:
-                        self.player.jump_horizontal_speed = JUMP_BACKWARD_SPEED
+                        self.player.jump_horizontal_speed = self.player.jump_backward_speed
                 else:
                     self.player.jump_horizontal_speed = 0
 
-                self.engine.jump(JUMP_SPEED)
+                self.engine.jump(self.player.jump_speed)
                 self.jump_buffer_timer = 0
 
 
@@ -353,11 +860,11 @@ class GameView(arcade.View):
         if (self.player.can_shoot and self.is_z_pressed and self.is_x_pressed and self.player.is_prepare_shooting
                 and self.reload_timer <= 0):
             bullet = Bullet(self.player.center_x, self.player.center_y, self.player.face_direction, 45, 20,
-                            damage=self.player.damage)
+                            self.walls, damage=self.player.damage)
             self.player.bullet_list.append(bullet)
             self.player.can_shoot = False
             self.reload_timer = self.reload_time
-            #self.player.center_x -= 10 #Доделать отдачу или убрать
+            self.shot_sound.play()
         if not self.is_z_pressed:
             self.player.can_shoot = True
 
@@ -396,10 +903,12 @@ class GameView(arcade.View):
             self.package.can_be_abandoned = True
 
 
-        print(f'raised:{self.package.is_raised}, lies:{self.package.is_lies}, abandoned:{self.package.is_abandoned}')
+
         print(f'e_pressed:{self.is_e_pressed}')
+        print(f'was_e_pressed:{self.was_e_pressed}')
         print(f'can_be_abandoned:{self.package.can_be_abandoned}')
         print(f'timer:{self.package.abandoned_timer}')
+
         if self.is_e_pressed and not self.was_e_pressed:
             if self.package.can_be_abandoned:
                 self.package.abandoned_timer = self.package.abandoned_time
@@ -419,9 +928,15 @@ class GameView(arcade.View):
                     else:
                         self.package.is_lies = True
                 elif (abs(self.player.center_x - self.package.center_x) <= self.package.raised_radius and
-                      abs(self.player.center_y - self.package.center_y) < 50
+                      abs(self.player.center_y - self.package.center_y) < 80
                       and was_lies and not was_abandoned):
                     self.package.is_raised = True
+        if not self.package.is_raised and not self.package.is_lies and not self.package.is_abandoned:
+            self.package.is_lies = True
+
+        print(f'raised:{self.package.is_raised}, lies:{self.package.is_lies}, abandoned:{self.package.is_abandoned}')
+
+
         self.was_e_pressed = self.is_e_pressed
 
 
@@ -434,6 +949,8 @@ class GameView(arcade.View):
                     self.player.center_x - 10 < hazard.center_x < self.player.center_x + 10):
                 if not self.player.invincible:
                     self.player.current_health -= 3
+                    if self.package.is_raised:
+                        self.package.current_health -= 2
                     self.player.is_hurt = True
                     self.player.hurt_timer = 0
                     self.player.invincible = True
@@ -453,12 +970,19 @@ class GameView(arcade.View):
 
                 for bullet in bullets_hit:
                     self.player.current_health -= bullet.damage
+                    if self.package.is_raised:
+                        self.package.current_health -= bullet.damage * 0.4
                     bullet.remove_from_sprite_lists()
 
             bullets_hit = arcade.check_for_collision_with_list(enemy, self.player.bullet_list)
             if bullets_hit:
                 for bullet in bullets_hit:
                     enemy.health -= bullet.damage
+                    if enemy.health <= 0:
+                        if self.greed_mod:
+                            self.reward_for_kills += enemy.reward_for_kill * 1.5
+                        else:
+                            self.reward_for_kills += enemy.reward_for_kill
                     bullet.remove_from_sprite_lists()
 
             if enemy.health <= 0:
@@ -472,6 +996,11 @@ class GameView(arcade.View):
             if bullets_hit:
                 for bullet in bullets_hit:
                     enemy.current_health -= bullet.damage
+                    if enemy.health <= 0:
+                        if self.greed_mod:
+                            self.reward_for_kills += enemy.reward_for_kill * 1.5
+                        else:
+                            self.reward_for_kills += enemy.reward_for_kill
                     bullet.remove_from_sprite_lists()
             if enemy.current_health <= 0:
                 enemy.remove_from_sprite_lists()
@@ -490,8 +1019,10 @@ class GameView(arcade.View):
         # ОБНОВЛЕНИЕ ФИЗИКИ
         self.engine.update()
 
+        print(f'can_jump:{self.package_engine.can_jump()}')
         if self.package.is_lies or self.package.is_abandoned:
             self.package_engine.update()
+
             if self.package_engine.can_jump() and self.package.is_abandoned:
                 self.package.is_abandoned = False
                 self.package.is_lies = True
@@ -527,9 +1058,18 @@ class GameView(arcade.View):
         self.gui_camera.position = (SCREEN_W / 2, SCREEN_H / 2)
 
         #ОБНОВЛЕНИЕ ТЕКСТОВЫХ ДАННЫХ НА ЭКРАНЕ
-        self.text_health = arcade.Text(f"Здоровье: {self.player.current_health}",
+        self.text_health = arcade.Text(f"Здоровье: {self.player.current_health:.2f}",
                                       16, SCREEN_H - 36, arcade.color.BLACK,
                                       20, batch=self.batch)
+        self.text_package_health = arcade.Text(f"Здоровье посылки: {self.package.current_health:.2f}",
+                                       16, SCREEN_H - 72, arcade.color.BLACK,
+                                       20, batch=self.batch)
+        self.text_total_game_time = arcade.Text(f"Время игры: {self.total_time_of_game:.2f}",
+                                               16, SCREEN_H - 108, arcade.color.BLACK,
+                                               20, batch=self.batch)
+        self.text_reward_for_kills = arcade.Text(f"Награда за убийства: {self.reward_for_kills:.2f}",
+                                       16, SCREEN_H - 144, arcade.color.BLACK,
+                                       20, batch=self.batch)
 
     def reset_all_states(self):
         self.player.is_walking = False
@@ -587,6 +1127,13 @@ class GameView(arcade.View):
         if key == arcade.key.E:
             self.is_e_pressed = False
 
+    def on_show_view(self):
+        self.backgound_player = self.background_music.play(loop=True, volume=0.1)
+
+    def on_hide_view(self):
+        arcade.stop_sound(self.backgound_player)
+
+
 
 class FaceDirection(enum.Enum):
     LEFT = 0
@@ -594,17 +1141,21 @@ class FaceDirection(enum.Enum):
 
 
 class Player(arcade.Sprite):
-    def __init__(self):
+    def __init__(self, damage=3, health=20):
         super().__init__('player/idle/idle-4.png', scale=2)
-        self.center_x = 280
-        self.center_y = 140
+        self.spawn_point = (280, 140)
+        self.center_x, self.center_y = self.spawn_point
 
         self.walk_speed = 2
         self.run_speed = 5
+        self.jump_backward_speed = 8
+        self.jump_forward_speed = 8
+        self.jump_speed = 40
+        self.ladder_speed = 3
 
-        self.health = self.current_health = 300
-        self.spawn_point = (280, 140)
-        self.damage = 100
+        self.health = self.current_health = health
+
+        self.damage = damage
         self.bullet_list = arcade.SpriteList()
 
         self.face_direction = FaceDirection.RIGHT
@@ -623,6 +1174,7 @@ class Player(arcade.Sprite):
         self.can_shoot = True
         self.was_climbing = False
         self.jump_horizontal_speed = 0
+        self.is_raised_package = True
 
         for i in range(1, 17):
             texture = arcade.load_texture(f'player/walk/walk-{i}.png')
@@ -732,7 +1284,7 @@ class Player(arcade.Sprite):
                 self.texture = self.idle_texture.flip_horizontally()
 
 class Bullet(arcade.Sprite):
-    def __init__(self, start_x, start_y, direction, dif_x, dif_y, speed=600, damage=10):
+    def __init__(self, start_x, start_y, direction, dif_x, dif_y, walls, speed=600, damage=10):
         super().__init__('misc/shot/shot-1.png', scale=2)
         if direction == FaceDirection.RIGHT:
             self.center_x = start_x + dif_x
@@ -743,6 +1295,7 @@ class Bullet(arcade.Sprite):
         self.direction = direction
         self.speed = speed
         self.damage = damage
+        self.walls = walls
 
         self.current_texture = 0
         self.texture_change_time = 0
@@ -762,6 +1315,8 @@ class Bullet(arcade.Sprite):
         if (self.center_x < 0 or self.center_x > WORLD_W or
                 self.center_y < 0 or self.center_y > WORLD_H):
             self.remove_from_sprite_lists()
+        if arcade.check_for_collision_with_list(self, self.walls):
+            self.remove_from_sprite_lists()
 
         self.center_x += self.change_x * delta_time
 
@@ -779,13 +1334,16 @@ class Bullet(arcade.Sprite):
 
 
 class Enemy_turret(arcade.Sprite):
-    def __init__(self, center_x, bottom_y, damage=10):
+    def __init__(self, center_x, bottom_y, damage=20, health=30):
         super().__init__('misc/turret/turret-1.png', scale=4)
         self.center_x = center_x
         self.center_y = bottom_y + self.height // 2
         self.damage = damage
-        self.health = 50
-        self.detection_radius = 9 * TILE_SIZE
+        self.health = health
+        self.batch = Batch()
+
+        self.reward_for_kill = 3
+        self.detection_radius = 12 * TILE_SIZE
         self.player_reference = None
         self.wall_list = None
         self.state = 'idle'
@@ -841,11 +1399,13 @@ class Enemy_turret(arcade.Sprite):
                 self.reload_timer -= delta_time
                 if self.reload_timer <= 0:
                     bullet = Bullet(self.center_x, self.center_y, self.attack_direction, 45, 25,
-                                    damage=self.damage)
+                                    self.wall_list, damage=self.damage)
                     self.bullet_list.append(bullet)
                     self.reload_timer = self.reload_time
         else:
             self.state = 'idle'
+        self.health_text = arcade.Text(f'{self.health}', self.center_x - 20, self.center_y + 70, arcade.color.RED,
+                                       batch=self.batch, font_size=24)
 
     def can_see_player(self):
         return arcade.has_line_of_sight(observer=(self.center_x, self.center_y),
@@ -853,12 +1413,13 @@ class Enemy_turret(arcade.Sprite):
                                         walls=self.wall_list)
 
 class Enemy_swordsman(arcade.Sprite):
-    def __init__(self, center_x, bottom_y, damage=10):
+    def __init__(self, center_x, bottom_y, damage=10, health=30):
         super().__init__('Free Swordsman Character/Animations/Idle/Idle_000.png', scale=0.2)
         self.center_x = center_x
         self.center_y = bottom_y + self.height // 2
         self.damage = damage
-        self.health = self.current_health = 100
+        self.reward_for_kill = 2
+        self.health = self.current_health = health
         self.detection_radius = 13 * TILE_SIZE
         self.height_dif = 280
         self.radius_of_attack = 1 * TILE_SIZE
@@ -866,6 +1427,8 @@ class Enemy_swordsman(arcade.Sprite):
         self.game_view = None
         self.engine = None
         self.face_direction = FaceDirection.RIGHT
+        self.batch = Batch()
+
 
         self.check_point = arcade.Sprite()
         self.check_point.width = self.check_point.height = 4
@@ -1013,7 +1576,6 @@ class Enemy_swordsman(arcade.Sprite):
             elif self.check_timer >= self.check_interval:
                 self.define_state(direction)
                 self.check_timer = 0
-
         else:
             self.state = 'idle'
 
@@ -1036,6 +1598,8 @@ class Enemy_swordsman(arcade.Sprite):
             else:
                 self.change_x = 0
         self.engine.update()
+        self.health_text = arcade.Text(f'{self.current_health}', self.center_x, self.center_y + 70,
+                                       arcade.color.RED, batch=self.batch, font_size=24)
 
     def define_state(self, direction):
         if self.state == 'jumping':
@@ -1086,6 +1650,7 @@ class Enemy_swordsman(arcade.Sprite):
                 return
         self.state = 'running'
 
+
     def get_stable_direction(self):
         dx = self.player_reference.center_x - self.center_x
         if abs(dx) < 15:
@@ -1114,7 +1679,7 @@ class Package(arcade.Sprite):
         super().__init__('package_texture.png', scale=0.1)
         self.center_x = center_x
         self.center_y = center_y
-        self.health = health
+        self.health = self.current_health = health
         self.is_lies = self.is_abandoned = False
         self.is_raised = True
         self.can_be_abandoned = False
