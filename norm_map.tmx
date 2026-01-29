@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<map version="1.10" tiledversion="1.11.2" orientation="orthogonal" renderorder="right-down" width="200" height="60" tilewidth="70" tileheight="70" infinite="0" nextlayerid="13" nextobjectid="16">
+ <tileset firstgid="1" source="../Карта к проекту arcade/city_factory.tsx"/>
+ <layer id="1" name="Main" width="200" height="60">
+  <data encoding="base64" compression="zlib">
+   eJzt1bENgDAQBEFXdhVQA/2XQQMQIJB8hglG+sDB6j/wPsbYAQAAAAAAgFfkxOwmAIBVpKABWqWgAVqloAFapaABWqWgAVqloAEAAAAAAAAAAAAAAAAAAACAtW0FDQDMl5vv/R8dcnK7u7cEAAAAAAAAAAAAAAAAgFa5mL9su5j/tgfgmQNmojS4
+  </data>
+ </layer>
+ <layer id="4" name="Collisions" width="200" height="60">
+  <data encoding="base64" compression="zlib">
+   eJztnU1vEzEQht3CgTOVkAh/AEEPnIoIIK5RkJCQaIWgt1b8/5+AVs0qluVZf83szNrvI426TTb2ZOMn9n54c+ec+4Zgi8fg/11GaOcci72BHLTj9hSAj0ftBJjYaydgAPjBTy9+APghAfzoB/jBD/xo5+jFd8U84Ac/vfihuf9xVKzbB37wk+NHiUNavo3ux5WDHxN/mWNqzz82HhNr+vHTW57HVRaAH/xgfJXPkQgNrk/hs4YfezfWsfRevm+kPrOUCzuhemNcBxGylh8jAT9ofCfW9IAi5oSPtB+j9R0T8IPGyn7FjKYfuW705g/8oLHix9KYymf2Q2JbfMpYp8f+BX7QaPuR68VMrR8566f86NGNCfhBo+XHB1fmxYy2HxZ51/h6+EGj7Ucpsx9XiXAZ67SG8/7GeLaR6NEPrnM6W/Uj91hbuN5u4TmfN0RYpyZnbT9+E4+X9ou+Hw+VuYRs1Q/AB/f23AtGTV0twA8g4YcP1U+/LgyKpXEA/ADWsHQco7U/gR+gBskxjSTcftzUJpIAftihZntadmAJyX0j7ZiAH/yM5AcHlt875YflnK3D7cddbSIbwXJbq/WjZiw3Ctx+9DLfisK6H7FzP/CjnppzaUvbm+vcnFWs+3EpFGtdz3GRsY5bMZ/nBnLgitHx+4+la0eWyF2vFKlyU9eK7AqjltJ6Wusr5bBiXdpQx9Op8RUAB7eOIxbGV1QO8ANoAz8AoIEfAJyxeP0M/Mjjn3YCnWPFhxD44dyrxgDtcLjxhaGMEPgBLAA/AKDp3Y97hlzAuMCPNNr3CAN6aPmRqhd+AAtI+0GVr+lHaXvfkh+9Hu+lfndD+rPZoh9S1+9enurYQplrlC1dp0buPec95+X3H5avJ53z85e1crK8jUJqrxPWfo8WzrHj+C6wCvwAgAZ+AEADPwCggR8A0MAPAGhG8sOfx/yiMcAYjOoHBxbn2IB2YnMLJfzI/U0zKT/eu/P9LyTugwE/+mQfLEv6kYOkH5JY9yP3/msvK8u3Ok91iaXv6ZgH8KMe621D+r5R1t9/rE3ntsmwDPhRjvX2IemH9b6Dyg9+nJH+/Cy3jwkpP6y5UbIv3bsfbwvqj70fqs18TJQVe95SG4kh4YeUGy1llrzWkh8xbiLLJX78KairxI9UubHntf1ItX8pPySAH08cIsvww7nP7mlOmh9fE6/Zuh9L8wdL5hL27sfkxgVTaP9WBQLRGr9O4T/2Hz4y/Fk=
+  </data>
+ </layer>
+ <layer id="12" name="Package_layer" width="200" height="60">
+  <data encoding="base64" compression="zlib">
+   eJzt0zENAAAIwDAU4//k4QMMkDaZhEUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAfZAdM/oDb9kcB+OAClQ==
+  </data>
+ </layer>
+ <layer id="10" name="Spawn Layer" width="200" height="60">
+  <data encoding="base64" compression="zlib">
+   eJzt2UtugzAQAFAfde5/iqpVFxW1PWMMTSrek2aD5xc2gaQ1AAAAeK74DgDg/4qLIutXmbu7X8XZOgB4umi+OwEArhCvXgAAgC/R8v+yZvm9ulHOaMbqjju9jj139wAAAOA60bxvAXCNSCKrGZ3t7pPN7QUAAMArReu/n0QnsvNjzmzW3TGbX5H1OuZWamc9s3lRiNl+1QAAAAAAeHfR+r9rjq4DAAAAALyjSKKXO6vP8ld3qead2ePn9VndrHa252jXSk41duv/IjIrtau9jzWzcwAAAAAAOCNOBgAAzxWFeJpoz/3sAABV0TwzAQC/RfOcEM09uEO0tXtazT+ej/JjIzJZTdZvZf7K3mfjLtV5o7OsbjZndaeVHp8+AHgkpoE=
+  </data>
+ </layer>
+ <layer id="5" name="hassasts" width="200" height="60">
+  <data encoding="base64" compression="zlib">
+   eJzt3bENgCAQBVBqXccR3H8mG0vQBAgc+l5ypYCh4gMhJQAAAACAsc5CAQAAAAAAwBcdmar9HgAAAACgJJdFtuaTAAAAf9G6ftoz1VvpjvbTPe1V1oWRxwYAAADMJzcAViT3BAAAAADoY+ZZ2Nr+true2u39T1Fy6SjjeOOtLAAAAAAAACBnlT1PAAAAAACAWd7eyIjQrj2f+HrPtTmHsS4gChBQ
+  </data>
+ </layer>
+ <layer id="6" name="libres" width="200" height="60">
+  <data encoding="base64" compression="zlib">
+   eJzt3MGNwzAMRcHUsg3s9l/dIncFsGzT+RJnzgJiin7IJcjrBQAAAAAAa/n59gOE+vv2AxBBH2P64E0fY/rgTR9jFX1obj36GNNHrVXuQh9j+qi1yl3oY0wftVa5C32M6aPWKnehjzF9zPl94DN2vr/V6GOOPnrRxxx9cNXO+9UHV+28X31w1c771UedJ+42wc771ccxZ2bo0sdqZnapj2P0sQ993E8f+9DH/fSxD33cTx/72OF9PKrTrNyj0zvTaVbmfPr+7vTOdJqVOfroNStz9NFrVuboo9eszNFHr1lTpe5AH71mTXXHDir2qI9es6bSR65Os6bSR65Os6bSR65Os6bSR65Os6bSR65Os6bSxzOfsdvvwbu3m7pPfWTQRyZ9ZNBHJn1k0EcmfWTQRyZ9ZNBHJn1k0EcmfWTQRyZ9ZNBHJn1k0Ecv1fve7T710Uv3Pmbn79BH+s6epI/a8ytK39mT9FF7fkXpO3uSPmrPp0j7f/NV6KP2fAp9nKOP2vMp9HGOPmrPp9AH8A/uPCjh
+  </data>
+ </layer>
+ <objectgroup id="8" name="Moving platforms">
+  <object id="2" gid="49" x="834.697" y="974.394" width="70" height="70">
+   <properties>
+    <property name="boundary_left" type="float" value="200"/>
+    <property name="boundary_right" type="float" value="900"/>
+    <property name="change_x" type="float" value="5"/>
+   </properties>
+  </object>
+  <object id="3" gid="79" x="205" y="2599" width="70" height="70">
+   <properties>
+    <property name="boundary_left" type="float" value="200"/>
+    <property name="boundary_right" type="float" value="700"/>
+    <property name="change_x" type="float" value="7"/>
+   </properties>
+  </object>
+  <object id="5" gid="63" x="310.455" y="3992.58" width="70" height="70">
+   <properties>
+    <property name="boundary_left" type="float" value="70"/>
+    <property name="boundary_right" type="float" value="560"/>
+    <property name="change_x" type="float" value="9"/>
+   </properties>
+  </object>
+  <object id="6" gid="35" x="2380.15" y="3919.85" width="70" height="70">
+   <properties>
+    <property name="boundary_left" type="float" value="2030"/>
+    <property name="boundary_right" type="float" value="2660"/>
+    <property name="change_x" type="float" value="4"/>
+   </properties>
+  </object>
+  <object id="7" gid="66" x="3637" y="3859" width="70" height="70">
+   <properties>
+    <property name="boundary_left" type="float" value="3500"/>
+    <property name="boundary_right" type="float" value="4060"/>
+    <property name="change_x" type="float" value="3"/>
+   </properties>
+  </object>
+  <object id="8" gid="79" x="4689" y="3855" width="70" height="70">
+   <properties>
+    <property name="boundary_bottom" type="float" value="140"/>
+    <property name="boundary_top" type="float" value="1400"/>
+    <property name="change_y" type="float" value="4"/>
+   </properties>
+  </object>
+  <object id="10" gid="80" x="7985" y="4059" width="70" height="70">
+   <properties>
+    <property name="boundary_bottom" type="float" value="70"/>
+    <property name="boundary_top" type="float" value="2800"/>
+    <property name="change_y" type="float" value="6"/>
+   </properties>
+  </object>
+  <object id="11" gid="80" x="2521" y="2591" width="70" height="70">
+   <properties>
+    <property name="boundary_left" type="float" value="1400"/>
+    <property name="boundary_right" type="float" value="3500"/>
+    <property name="change_x" type="float" value="6"/>
+   </properties>
+  </object>
+  <object id="12" gid="79" x="6301.36" y="2728.94" width="70" height="70">
+   <properties>
+    <property name="boundary_bottom" type="float" value="1330"/>
+    <property name="boundary_top" type="float" value="2310"/>
+    <property name="change_y" type="float" value="3"/>
+   </properties>
+  </object>
+  <object id="13" gid="50" x="12043.8" y="559.242" width="70" height="70">
+   <properties>
+    <property name="boundary_left" type="float" value="12040"/>
+    <property name="boundary_right" type="float" value="13300"/>
+    <property name="change_x" type="float" value="4"/>
+   </properties>
+  </object>
+  <object id="15" gid="65" x="6022.58" y="1616.82" width="70" height="70">
+   <properties>
+    <property name="boundary_left" type="float" value="6020"/>
+    <property name="boundary_right" type="float" value="6510"/>
+    <property name="change_x" type="float" value="5"/>
+   </properties>
+  </object>
+ </objectgroup>
+</map>
