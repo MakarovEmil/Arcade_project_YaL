@@ -3,10 +3,9 @@ import enum
 import random
 import sqlite3
 from datetime import date
-from arcade.gui import UIManager, UIFlatButton, UITextureButton, UILabel, UIInputText, UITextArea, UISlider, UIDropdown, \
-    UIMessageBox, UIGridLayout
+from arcade.gui import UIManager, UIFlatButton, UILabel, UIInputText, UITextArea, UIMessageBox, UIGridLayout
 
-from arcade.particles import FadeParticle, Emitter, EmitBurst, EmitInterval, EmitMaintainCount
+from arcade.particles import FadeParticle, Emitter, EmitBurst
 from arcade.gui.widgets.layout import UIAnchorLayout, UIBoxLayout
 from pyglet.graphics import Batch
 from arcade.camera import Camera2D
@@ -22,8 +21,8 @@ GRAVITY = 7
 
 CAMERA_LERP = 0.12
 TILE_SIZE = 70
-WORLD_W = TILE_SIZE * 53
-WORLD_H = TILE_SIZE * 28
+WORLD_W = TILE_SIZE * 200
+WORLD_H = TILE_SIZE * 60
 
 COYOTE_TIME = 0.08
 JUMP_BUFFER = 0.12
@@ -450,13 +449,13 @@ class End_game_view(arcade.View):
         reward = 0
         if not success:
             return reward
-        elif total_time <= 120:
-            reward = 15
         elif total_time <= 180:
-            reward = 10
+            reward = 15
         elif total_time <= 240:
-            reward = 5
+            reward = 10
         elif total_time <= 300:
+            reward = 5
+        elif total_time <= 360:
             reward = 3
         else:
             reward = 0
@@ -501,8 +500,6 @@ class End_game_view(arcade.View):
                                                                            self.window.width,
                                                                            self.window.height))
         self.manager.draw()
-
-
 
 
 class GameView(arcade.View):
@@ -609,13 +606,50 @@ class GameView(arcade.View):
 
         self.reload_timer = 0
         self.reload_time = 0.5
+        self.distance_check_timer = 0
 
-        print(self.modifiers)
+        self.idle_texture_sword = arcade.load_texture(f'Free Swordsman Character/Animations/Idle/Idle_000.png')
+
+        self.run_textures_sword = []
+        for i in range(10):
+            texture = arcade.load_texture(f'Free Swordsman Character/Animations/Run/Run_00{i}.png')
+            self.run_textures_sword.append(texture)
+
+        self.attack_1_textures_sword = []
+        for i in range(10):
+            texture = arcade.load_texture(f'Free Swordsman Character/Animations/Attack/Attack_00{i}.png')
+            self.attack_1_textures_sword.append(texture)
+
+        self.attack_2_textures_sword = []
+        for i in range(9):
+            texture = arcade.load_texture(f'Free Swordsman Character/Animations/Attack 2/Attack 2_00{i}.png')
+            self.attack_2_textures_sword.append(texture)
+
+        self.jumping_textures_sword = []
+        for i in range(10):
+            texture = arcade.load_texture(f'Free Swordsman Character/Animations/Jump Start/Jump Start_00{i}.png')
+            self.jumping_textures_sword.append(texture)
+
+        self.idle_textures_tur = []
+        for i in range(1, 7):
+            texture = arcade.load_texture(f'misc/turret/turret-{i}.png')
+            self.idle_textures_tur.append(texture)
+
+        self.bullet_textures = []
+        for i in range(1, 4):
+            texture = arcade.load_texture(f'misc/shot/shot-{i}.png')
+            self.bullet_textures.append(texture)
+
+        self.attack_texture_tur = arcade.load_texture('misc/turret/turret-5.png')
+
         self.enemy_turet_list = arcade.SpriteList(use_spatial_hash=True)
-        for _ in range(5):
+        for _ in range(50):
             center_x, center_y = self.get_valid_spawn_positions()
-            damage, health = int(self.player.damage * 1.2), int(self.player.health * 1.3)
+            damage, health = int(self.player.health * 0.5), int(self.player.health * 1.3)
             enemy = Enemy_turret(center_x, center_y, damage=damage, health=health)
+            enemy.idle_textures = self.idle_textures_tur
+            enemy.attack_texture = self.attack_texture_tur
+            enemy.bullet_textures = self.bullet_textures
             if 'Толстокожие враги' in self.modifiers:
                 enemy.health *= 2
                 enemy.reward_for_kill *= 1.2
@@ -627,10 +661,15 @@ class GameView(arcade.View):
             self.enemy_turet_list.append(enemy)
 
         self.enemy_swordsman_list = arcade.SpriteList(use_spatial_hash=True)
-        for _ in range(5):
+        for _ in range(50):
             center_x, center_y = self.get_valid_spawn_positions()
-            damage, health = int(self.player.damage), int(self.player.health * 1.1)
+            damage, health = int(self.player.health * 0.3), int(self.player.health * 1.1)
             enemy = Enemy_swordsman(center_x, center_y, damage=damage, health=health)
+            enemy.idle_texture = self.idle_texture_sword
+            enemy.run_textures = self.run_textures_sword
+            enemy.attack_1_textures = self.attack_1_textures_sword
+            enemy.attack_2_textures = self.attack_2_textures_sword
+            enemy.jumping_textures = self.jumping_textures_sword
             if 'Толстокожие враги' in self.modifiers:
                 enemy.health *= 2
                 enemy.current_health *= 2
@@ -663,6 +702,14 @@ class GameView(arcade.View):
             )
         self.package_list.append(self.package)
 
+        self.text_health = arcade.Text("", 16, SCREEN_H - 36, arcade.color.BLACK, 20, batch=self.batch)
+        self.text_package_health = arcade.Text("", 16, SCREEN_H - 72, arcade.color.BLACK,
+                                               20, batch=self.batch)
+        self.text_total_game_time = arcade.Text("", 16, SCREEN_H - 108, arcade.color.BLACK,
+                                                20, batch=self.batch)
+        self.text_reward_for_kills = arcade.Text("", 16, SCREEN_H - 144, arcade.color.BLACK,
+                                                 20, batch=self.batch)
+
     def create_spawn_effect(self, x, y):
         spark_tex = arcade.make_soft_circle_texture(10, arcade.color.PASTEL_YELLOW)
         explosion = Emitter(
@@ -691,6 +738,7 @@ class GameView(arcade.View):
         self.walls.draw()
         self.platforms.draw()
         self.ladders.draw()
+        self.hazards.draw()
         self.player_list.draw()
         self.package_list.draw()
         self.player.bullet_list.draw()
@@ -700,23 +748,17 @@ class GameView(arcade.View):
             enemy.bullet_list.draw()
             enemy.batch.draw()
         for enemy in self.enemy_swordsman_list:
-            arcade.draw_point(enemy.check_point.center_x, enemy.check_point.center_y, arcade.color.BLACK, 10)
-            arcade.draw_line(enemy.x, enemy.y, enemy.test_gap_line_x, enemy.test_gap_line_y, arcade.color.BLACK)
             enemy.batch.draw()
         if 'Туман' in self.modifiers:
             arcade.draw_rect_filled(arcade.rect.XYWH(WORLD_W // 2, WORLD_H // 2, WORLD_W, WORLD_H),
                                     (20, 20, 20, 200))
-
         for effect in self.particle_effects:
             effect.draw()
 
         self.gui_camera.use()
         self.batch.draw()
 
-
-
     def on_update(self, delta_time):
-        #ПРОВЕРКА ЗДОРОВЬЯ ПОСЫЛКИ
         if self.package.current_health <= 0:
             end_game_view = End_game_view(self.username, self.total_time_of_game, self.reward_for_kills,
                                           greed_mod=self.greed_mod, success=False)
@@ -724,13 +766,11 @@ class GameView(arcade.View):
 
         self.total_time_of_game += delta_time
 
-        #ПРОВЕРКА ДОСТАВКИ ПОСЫЛКИ
         if arcade.check_for_collision_with_list(self.package, self.package_layer) and self.package.current_health > 0:
             end_game_view = End_game_view(self.username, self.total_time_of_game, self.reward_for_kills)
             window.show_view(end_game_view)
             return
 
-        # ПРОВЕРКА СМЕРТИ ИГРОКА
         if self.player.current_health <= 0:
             if self.package.is_raised:
                 self.package.is_lies = True
@@ -741,14 +781,10 @@ class GameView(arcade.View):
             self.player.current_health = self.player.health
             return
 
-        #ОБНОВЛЕНИЕ ЧАСТИЦ
         for effect in self.particle_effects[:]:
             effect.update(delta_time)
             if effect.can_reap():
                 self.particle_effects.remove(effect)
-
-
-        #АКТИВНОСТЬ ИГРОКА
 
         current_on_ladder = self.engine.is_on_ladder()
         current_grounded = self.engine.can_jump(y_distance=6)
@@ -766,10 +802,15 @@ class GameView(arcade.View):
         on_ladder = self.stable_on_ladder
         grounded = self.stable_grounded
 
-        #Состояние игрока
         self.reset_all_states()
         if on_ladder and (self.up or self.down):
             self.player.is_climbing = True
+
+        elif on_ladder and (self.player.is_jumping_forward or self.player.is_jumping_backward):
+            self.player.is_jumping_backward = False
+            self.player.is_jumping_forward = False
+            self.player.is_jumping_vertical = False
+            self.player.is_jumping = False
         elif not on_ladder and not grounded:
             self.player.is_jumping_vertical = True
         elif self.is_ctrl_pressed and (self.left or self.right):
@@ -779,8 +820,6 @@ class GameView(arcade.View):
         elif self.is_x_pressed:
             self.player.is_prepare_shooting = True
 
-
-        # Лестницы
         if self.player.is_climbing:
             if self.up and not self.down:
                 self.player.change_y = self.player.ladder_speed
@@ -789,7 +828,6 @@ class GameView(arcade.View):
         else:
             self.player.change_y = 0
 
-        # Прыжок
         if grounded:
             self.time_since_ground = 0
             self.jumps_left = MAX_JUMPS
@@ -854,13 +892,12 @@ class GameView(arcade.View):
                 self.engine.jump(self.player.jump_speed)
                 self.jump_buffer_timer = 0
 
-
-        # Выстрел
         self.reload_timer -= delta_time
         if (self.player.can_shoot and self.is_z_pressed and self.is_x_pressed and self.player.is_prepare_shooting
                 and self.reload_timer <= 0):
             bullet = Bullet(self.player.center_x, self.player.center_y, self.player.face_direction, 45, 20,
                             self.walls, damage=self.player.damage)
+            bullet.textures = self.bullet_textures
             self.player.bullet_list.append(bullet)
             self.player.can_shoot = False
             self.reload_timer = self.reload_time
@@ -868,9 +905,7 @@ class GameView(arcade.View):
         if not self.is_z_pressed:
             self.player.can_shoot = True
 
-        # Бег или ходьба
         move = 0
-
         if not self.player.is_jumping:
             if self.left and not self.right:
                 if self.player.is_walking:
@@ -891,24 +926,13 @@ class GameView(arcade.View):
             self.player.change_x = self.player.jump_horizontal_speed + move
         else:
             self.player.change_x = move
-
         if move == 0:
             self.player.is_walking = False
             self.player.is_running = False
-
-        #ОБНОВЛЕНИЕ СОСТОЯНИЯ ПОСЫЛКИ И ОБНОВЛЕНИЕ ТАЙМЕРА
         if self.package.abandoned_timer > 0:
             self.package.abandoned_timer -= delta_time
         else:
             self.package.can_be_abandoned = True
-
-
-
-        print(f'e_pressed:{self.is_e_pressed}')
-        print(f'was_e_pressed:{self.was_e_pressed}')
-        print(f'can_be_abandoned:{self.package.can_be_abandoned}')
-        print(f'timer:{self.package.abandoned_timer}')
-
         if self.is_e_pressed and not self.was_e_pressed:
             if self.package.can_be_abandoned:
                 self.package.abandoned_timer = self.package.abandoned_time
@@ -933,96 +957,83 @@ class GameView(arcade.View):
                     self.package.is_raised = True
         if not self.package.is_raised and not self.package.is_lies and not self.package.is_abandoned:
             self.package.is_lies = True
-
-        print(f'raised:{self.package.is_raised}, lies:{self.package.is_lies}, abandoned:{self.package.is_abandoned}')
-
-
         self.was_e_pressed = self.is_e_pressed
 
-
-
-
-        #ПРОВЕРКА СТОЛКНОВЕНИЙ
-
-        for hazard in self.hazards:
-            if (abs(hazard.top - self.player.bottom) < 10 and
-                    self.player.center_x - 10 < hazard.center_x < self.player.center_x + 10):
-                if not self.player.invincible:
-                    self.player.current_health -= 3
-                    if self.package.is_raised:
-                        self.package.current_health -= 2
-                    self.player.is_hurt = True
-                    self.player.hurt_timer = 0
-                    self.player.invincible = True
-                    self.player.invincible_timer = 1.0
-
-
-        # ОБНОВЛЕНИЕ ВРАГОВ И ПУЛЬ
-        for enemy in self.enemy_turet_list:
-            enemy.player_reference = self.player
-
-            bullets_hit = arcade.check_for_collision_with_list(self.player, enemy.bullet_list)
-            if bullets_hit and not self.player.invincible:
+        if self.player.is_check_hazards:
+            self.player.is_check_hazards = False
+            if arcade.check_for_collision_with_list(self.player, self.hazards):
+                self.player.current_health -= 3
+                if self.package.is_raised:
+                    self.package.current_health -= 2
                 self.player.is_hurt = True
                 self.player.hurt_timer = 0
-                self.player.invincible = True
-                self.player.invincible_timer = 1.0
 
-                for bullet in bullets_hit:
-                    self.player.current_health -= bullet.damage
-                    if self.package.is_raised:
-                        self.package.current_health -= bullet.damage * 0.4
-                    bullet.remove_from_sprite_lists()
-
-            bullets_hit = arcade.check_for_collision_with_list(enemy, self.player.bullet_list)
-            if bullets_hit:
-                for bullet in bullets_hit:
-                    enemy.health -= bullet.damage
-                    if enemy.health <= 0:
-                        if self.greed_mod:
-                            self.reward_for_kills += enemy.reward_for_kill * 1.5
-                        else:
-                            self.reward_for_kills += enemy.reward_for_kill
-                    bullet.remove_from_sprite_lists()
-
-            if enemy.health <= 0:
-                enemy.remove_from_sprite_lists()
-
-            enemy.bullet_list.update()
-            enemy.bullet_list.update_animation()
+        all_bullets = arcade.SpriteList()
+        for enemy in self.enemy_turet_list:
+            if enemy.bullet_list:
+                all_bullets.extend(enemy.bullet_list)
+        if all_bullets:
+            all_bullets.update()
+            all_bullets.update_animation()
+        bullets_hit = arcade.check_for_collision_with_list(self.player, all_bullets)
+        if bullets_hit and not self.player.invincible:
+            self.player.is_hurt = True
+            self.player.hurt_timer = 0
+            self.player.invincible = True
+            self.player.invincible_timer = 1.0
+            for bullet in bullets_hit:
+                self.player.current_health -= bullet.damage
+                if self.package.is_raised:
+                    self.package.current_health -= bullet.damage * 0.4
+                bullet.remove_from_sprite_lists()
+        for enemy in self.enemy_turet_list:
+            if enemy.is_visible:
+                bullets_hit = arcade.check_for_collision_with_list(enemy, self.player.bullet_list)
+                if bullets_hit:
+                    for bullet in bullets_hit:
+                        enemy.health -= bullet.damage
+                        if enemy.health <= 0:
+                            if self.greed_mod:
+                                self.reward_for_kills += enemy.reward_for_kill * 1.5
+                            else:
+                                self.reward_for_kills += enemy.reward_for_kill
+                        bullet.remove_from_sprite_lists()
+                enemy.health_text.text = f'{enemy.health}'
+                if enemy.health <= 0:
+                    enemy.remove_from_sprite_lists()
         for enemy in self.enemy_swordsman_list:
-            enemy.player_reference = self.player
-            bullets_hit = arcade.check_for_collision_with_list(enemy, self.player.bullet_list)
-            if bullets_hit:
-                for bullet in bullets_hit:
-                    enemy.current_health -= bullet.damage
-                    if enemy.health <= 0:
-                        if self.greed_mod:
-                            self.reward_for_kills += enemy.reward_for_kill * 1.5
-                        else:
-                            self.reward_for_kills += enemy.reward_for_kill
-                    bullet.remove_from_sprite_lists()
-            if enemy.current_health <= 0:
-                enemy.remove_from_sprite_lists()
+            if enemy.is_visible:
+                enemy.player_reference = self.player
+                bullets_hit = arcade.check_for_collision_with_list(enemy, self.player.bullet_list)
+                if bullets_hit:
+                    for bullet in bullets_hit:
+                        enemy.current_health -= bullet.damage
+                        if enemy.current_health <= 0:
+                            if self.greed_mod:
+                                self.reward_for_kills += enemy.reward_for_kill * 1.5
+                            else:
+                                self.reward_for_kills += enemy.reward_for_kill
+                        bullet.remove_from_sprite_lists()
+                enemy.health_text.text = f'{enemy.current_health}'
+                if enemy.current_health <= 0:
+                    enemy.remove_from_sprite_lists()
 
-        # ОБНОВЛЕНИЕ ТАЙМЕРОВ ИГРОКА
         if self.player.is_hurt:
             self.player.hurt_timer += delta_time
             if self.player.hurt_timer >= self.player.hurt_animation_time:
                 self.player.is_hurt = False
-
         if self.player.invincible:
             self.player.invincible_timer -= delta_time
             if self.player.invincible_timer <= 0:
                 self.player.invincible = False
+        self.player.hazards_check_timer += delta_time
+        if self.player.hazards_check_timer >= self.player.hazards_check_interval:
+            self.player.hazards_check_timer = 0
+            self.player.is_check_hazards = True
 
-        # ОБНОВЛЕНИЕ ФИЗИКИ
         self.engine.update()
-
-        print(f'can_jump:{self.package_engine.can_jump()}')
         if self.package.is_lies or self.package.is_abandoned:
             self.package_engine.update()
-
             if self.package_engine.can_jump() and self.package.is_abandoned:
                 self.package.is_abandoned = False
                 self.package.is_lies = True
@@ -1033,43 +1044,49 @@ class GameView(arcade.View):
             self.package.center_x = self.player.center_x
             self.package.center_y = self.player.center_y
 
-
-        # АНИМАЦИИ
         self.player.update_animation(delta_time)
+        self.player.bullet_list.update()
+        self.player.bullet_list.update_animation()
+        self.distance_check_timer += delta_time
+        if self.distance_check_timer >= 0.3:
+            self.update_visible_enemies()
+            self.distance_check_timer = 0
         self.enemy_turet_list.update_animation(delta_time)
         self.enemy_turet_list.update()
         self.enemy_swordsman_list.update_animation(delta_time)
         self.enemy_swordsman_list.update()
-        self.player.bullet_list.update()
-        self.player.bullet_list.update_animation()
 
-        #КАМЕРА
         target = (self.player.center_x, self.player.center_y)
         cx, cy = self.world_camera.position
         smooth = (cx + (target[0] - cx) * CAMERA_LERP,
                   cy + (target[1] - cy) * CAMERA_LERP)
-
         half_w = self.world_camera.viewport_width / 2
         half_h = self.world_camera.viewport_height / 2
         cam_x = max(half_w, min(WORLD_W - half_w, smooth[0]))
         cam_y = max(half_h, min(WORLD_H - half_h, smooth[1]))
-
         self.world_camera.position = (cam_x, cam_y)
         self.gui_camera.position = (SCREEN_W / 2, SCREEN_H / 2)
 
-        #ОБНОВЛЕНИЕ ТЕКСТОВЫХ ДАННЫХ НА ЭКРАНЕ
-        self.text_health = arcade.Text(f"Здоровье: {self.player.current_health:.2f}",
-                                      16, SCREEN_H - 36, arcade.color.BLACK,
-                                      20, batch=self.batch)
-        self.text_package_health = arcade.Text(f"Здоровье посылки: {self.package.current_health:.2f}",
-                                       16, SCREEN_H - 72, arcade.color.BLACK,
-                                       20, batch=self.batch)
-        self.text_total_game_time = arcade.Text(f"Время игры: {self.total_time_of_game:.2f}",
-                                               16, SCREEN_H - 108, arcade.color.BLACK,
-                                               20, batch=self.batch)
-        self.text_reward_for_kills = arcade.Text(f"Награда за убийства: {self.reward_for_kills:.2f}",
-                                       16, SCREEN_H - 144, arcade.color.BLACK,
-                                       20, batch=self.batch)
+        self.text_health.text = f"Здоровье: {self.player.current_health:.2f}"
+        self.text_package_health.text = f"Здоровье посылки: {self.package.current_health:.2f}"
+        self.text_total_game_time.text = f"Время игры: {self.total_time_of_game:.2f}"
+        self.text_reward_for_kills.text = f"Награда за врагов: {self.reward_for_kills:.2f}"
+
+    def update_visible_enemies(self):
+        vertical_threshold = 6 * TILE_SIZE
+        horizontal_threshold = 20 * TILE_SIZE
+        for enemy in self.enemy_turet_list:
+            if (abs(enemy.center_y - self.player.center_y) <= vertical_threshold and
+                    abs(enemy.center_x - self.player.center_x) <= horizontal_threshold):
+                enemy.is_visible = True
+            else:
+                enemy.is_visible = False
+        for enemy in self.enemy_swordsman_list:
+            if (abs(enemy.center_y - self.player.center_y) <= vertical_threshold and
+                    abs(enemy.center_x - self.player.center_x) <= horizontal_threshold):
+                enemy.is_visible = True
+            else:
+                enemy.is_visible = False
 
     def reset_all_states(self):
         self.player.is_walking = False
@@ -1132,7 +1149,6 @@ class GameView(arcade.View):
 
     def on_hide_view(self):
         arcade.stop_sound(self.backgound_player)
-
 
 
 class FaceDirection(enum.Enum):
@@ -1210,6 +1226,9 @@ class Player(arcade.Sprite):
         self.invincible = False
         self.invincible_timer = 0
         self.invincible_duration = 1.0
+        self.is_check_hazards = False
+        self.hazards_check_interval = 0.5
+        self.hazards_check_timer = 0
 
     def update_animation(self, delta_time: float = 1 / 60):
         if self.is_hurt:
@@ -1283,8 +1302,9 @@ class Player(arcade.Sprite):
             elif self.face_direction == FaceDirection.LEFT:
                 self.texture = self.idle_texture.flip_horizontally()
 
+
 class Bullet(arcade.Sprite):
-    def __init__(self, start_x, start_y, direction, dif_x, dif_y, walls, speed=600, damage=10):
+    def __init__(self, start_x, start_y, direction, dif_x, dif_y, walls, speed=600, damage=10, max_distance=800):
         super().__init__('misc/shot/shot-1.png', scale=2)
         if direction == FaceDirection.RIGHT:
             self.center_x = start_x + dif_x
@@ -1295,18 +1315,20 @@ class Bullet(arcade.Sprite):
         self.direction = direction
         self.speed = speed
         self.damage = damage
-        self.walls = walls
 
         self.current_texture = 0
         self.texture_change_time = 0
         self.texture_change_delay = 0.05
+        self.check_timer = 0
 
-        self.textures = []
-        for i in range(1, 4):
-            texture = arcade.load_texture(f'misc/shot/shot-{i}.png')
-            self.textures.append(texture)
+        self.textures = None
+        self.walls = walls
 
     def update(self, delta_time):
+        self.check_timer += delta_time
+        if self.check_timer >= 0.15:
+            if arcade.check_for_collision_with_list(self, self.walls):
+                self.remove_from_sprite_lists()
         if self.direction == FaceDirection.RIGHT:
             self.change_x = self.speed
         elif self.direction == FaceDirection.LEFT:
@@ -1315,9 +1337,6 @@ class Bullet(arcade.Sprite):
         if (self.center_x < 0 or self.center_x > WORLD_W or
                 self.center_y < 0 or self.center_y > WORLD_H):
             self.remove_from_sprite_lists()
-        if arcade.check_for_collision_with_list(self, self.walls):
-            self.remove_from_sprite_lists()
-
         self.center_x += self.change_x * delta_time
 
     def update_animation(self, delta_time: float = 1 / 60):
@@ -1341,19 +1360,18 @@ class Enemy_turret(arcade.Sprite):
         self.damage = damage
         self.health = health
         self.batch = Batch()
+        self.health_text = arcade.Text(f'', self.center_x - 20, self.center_y + 70, arcade.color.RED,
+                                       batch=self.batch, font_size=24)
 
         self.reward_for_kill = 3
-        self.detection_radius = 12 * TILE_SIZE
+        self.detection_radius_squared = (12 * TILE_SIZE) ** 2
         self.player_reference = None
         self.wall_list = None
         self.state = 'idle'
         self.attack_direction = FaceDirection.RIGHT
-        self.idle_textures = []
-        for i in range(1, 7):
-            texture = arcade.load_texture(f'misc/turret/turret-{i}.png')
-            self.idle_textures.append(texture)
 
-        self.attack_texture = arcade.load_texture('misc/turret/turret-5.png')
+        self.idle_textures = None
+        self.attack_texture = None
 
         self.current_texture = 0
         self.texture_change_time = 0
@@ -1363,29 +1381,38 @@ class Enemy_turret(arcade.Sprite):
         self.reload_time = 2.0
 
         self.check_timer = 0
-        self.check_interval = 1.5
+        self.check_interval = 2.5
         self.can_see_player_cash = False
+        self.is_visible = False
 
         self.bullet_list = arcade.SpriteList()
+        self.bullet_textures = None
 
     def update_animation(self, delta_time: float = 1 / 60):
-        if self.state == 'idle':
-            self.texture_change_time += delta_time
-            if self.texture_change_time >= self.texture_change_delay:
-                self.texture_change_time = 0
-                self.current_texture += 1
-                if self.current_texture >= len(self.idle_textures):
-                    self.current_texture = 0
-                self.texture = self.idle_textures[self.current_texture]
-        elif self.state == 'attack':
-            if self.attack_direction == FaceDirection.RIGHT:
-                self.texture = self.attack_texture
-            elif self.attack_direction == FaceDirection.LEFT:
-                self.texture = self.attack_texture.flip_horizontally()
+        if self.is_visible:
+            if self.state == 'idle':
+                self.texture_change_time += delta_time
+                if self.texture_change_time >= self.texture_change_delay:
+                    self.texture_change_time = 0
+                    self.current_texture += 1
+                    if self.current_texture >= len(self.idle_textures):
+                        self.current_texture = 0
+                    self.texture = self.idle_textures[self.current_texture]
+            elif self.state == 'attack':
+                if self.attack_direction == FaceDirection.RIGHT:
+                    self.texture = self.attack_texture
+                elif self.attack_direction == FaceDirection.LEFT:
+                    self.texture = self.attack_texture.flip_horizontally()
 
     def update(self, delta_time):
-        distance = arcade.get_distance_between_sprites(self, self.player_reference)
-        if distance <= self.detection_radius and abs(self.player_reference.center_y - self.center_y) <= 70:
+        if not self.is_visible:
+            return
+        dx = self.player_reference.center_x - self.center_x
+        dy = self.player_reference.center_y - self.center_y
+        distance_squared = dx * dx + dy * dy
+        if (distance_squared <= self.detection_radius_squared and abs(
+            self.player_reference.center_y - self.center_y)
+            <= 70):
             self.check_timer += delta_time
             if self.check_timer >= self.check_interval:
                 self.can_see_player_cash = self.can_see_player()
@@ -1400,17 +1427,27 @@ class Enemy_turret(arcade.Sprite):
                 if self.reload_timer <= 0:
                     bullet = Bullet(self.center_x, self.center_y, self.attack_direction, 45, 25,
                                     self.wall_list, damage=self.damage)
+                    bullet.textures = self.bullet_textures
                     self.bullet_list.append(bullet)
                     self.reload_timer = self.reload_time
         else:
             self.state = 'idle'
-        self.health_text = arcade.Text(f'{self.health}', self.center_x - 20, self.center_y + 70, arcade.color.RED,
-                                       batch=self.batch, font_size=24)
 
-    def can_see_player(self):
-        return arcade.has_line_of_sight(observer=(self.center_x, self.center_y),
-                                        target=(self.player_reference.center_x, self.player_reference.center_y),
-                                        walls=self.wall_list)
+    def can_see_player(self, steps=10):
+        px, py = self.player_reference.center_x, self.player_reference.center_y
+        tx, ty = self.center_x, self.center_y
+        for i in range(steps + 1):
+            t = i / steps
+            check_x = tx + (px - tx) * t
+            check_y = ty + (py - ty) * t
+            test_point = arcade.SpriteSolidColor(5, 5, arcade.color.TRANSPARENT_BLACK)
+            test_point.center_x = check_x
+            test_point.center_y = check_y
+            walls_at_point = arcade.check_for_collision_with_list(test_point, self.wall_list)
+            if walls_at_point:
+                return False
+        return True
+
 
 class Enemy_swordsman(arcade.Sprite):
     def __init__(self, center_x, bottom_y, damage=10, health=30):
@@ -1420,7 +1457,7 @@ class Enemy_swordsman(arcade.Sprite):
         self.damage = damage
         self.reward_for_kill = 2
         self.health = self.current_health = health
-        self.detection_radius = 13 * TILE_SIZE
+        self.detection_radius_squared = (12 * TILE_SIZE) ** 2
         self.height_dif = 280
         self.radius_of_attack = 1 * TILE_SIZE
         self.player_reference = None
@@ -1428,7 +1465,8 @@ class Enemy_swordsman(arcade.Sprite):
         self.engine = None
         self.face_direction = FaceDirection.RIGHT
         self.batch = Batch()
-
+        self.health_text = arcade.Text(f'', self.center_x, self.center_y + 70,
+                                       arcade.color.RED, batch=self.batch, font_size=24)
 
         self.check_point = arcade.Sprite()
         self.check_point.width = self.check_point.height = 4
@@ -1438,6 +1476,7 @@ class Enemy_swordsman(arcade.Sprite):
         self.check_interval = 2.5
 
         self.has_jumped = False
+        self.is_visible = False
 
         self.max_height_of_wall = 3 * TILE_SIZE
         self.max_width_of_gap = 5 * TILE_SIZE
@@ -1450,28 +1489,11 @@ class Enemy_swordsman(arcade.Sprite):
         self.gap_horizontal_jump_power = 15
         self.jump_speed = 25
 
-        self.idle_texture = arcade.load_texture(f'Free Swordsman Character/Animations/Idle/Idle_000.png')
-        self.texture = self.idle_texture
-
-        self.run_textures = []
-        for i in range(10):
-            texture = arcade.load_texture(f'Free Swordsman Character/Animations/Run/Run_00{i}.png')
-            self.run_textures.append(texture)
-
-        self.attack_1_textures = []
-        for i in range(10):
-            texture = arcade.load_texture(f'Free Swordsman Character/Animations/Attack/Attack_00{i}.png')
-            self.attack_1_textures.append(texture)
-
-        self.attack_2_textures = []
-        for i in range(9):
-            texture = arcade.load_texture(f'Free Swordsman Character/Animations/Attack 2/Attack 2_00{i}.png')
-            self.attack_2_textures.append(texture)
-
-        self.jumping_textures = []
-        for i in range(10):
-            texture = arcade.load_texture(f'Free Swordsman Character/Animations/Jump Start/Jump Start_00{i}.png')
-            self.jumping_textures.append(texture)
+        self.idle_texture = None
+        self.run_textures = None
+        self.attack_1_textures = None
+        self.attack_2_textures = None
+        self.jumping_textures = None
 
         self.current_texture = 0
         self.texture_change_time = 0
@@ -1481,67 +1503,80 @@ class Enemy_swordsman(arcade.Sprite):
         self.reload_timer = 1.5
         self.can_attack = False
         self.jump_timer = 0
-
-        self.test_gap_line_x = self.test_gap_line_y = self.x = self.y = 0
+        self.is_check_hazards = False
+        self.hazards_check_interval = 1.0
+        self.hazards_check_timer = 0
 
     def update_animation(self, delta_time: float = 1 / 60):
-        if self.state == 'idle':
-            if self.face_direction == FaceDirection.RIGHT:
-                self.texture = self.idle_texture
-            elif self.face_direction == FaceDirection.LEFT:
-                self.texture = self.idle_texture.flip_horizontally()
-        elif self.state.startswith('attack_'):
-            self.texture_change_time += delta_time
-            if self.texture_change_time >= self.texture_change_delay:
-                self.texture_change_time = 0
-                self.current_texture += 1
-                if self.state == 'attack_1':
-                    textures = self.attack_1_textures
-                else:  # 'attack_2'
-                    textures = self.attack_2_textures
-                if self.current_texture >= len(textures):
-                    if self.state.startswith('attack_'):
-                        self.state = 'idle'
+        if self.is_visible:
+            if self.state == 'idle':
+                if self.face_direction == FaceDirection.RIGHT:
+                    self.texture = self.idle_texture
+                elif self.face_direction == FaceDirection.LEFT:
+                    self.texture = self.idle_texture.flip_horizontally()
+            elif self.state.startswith('attack_'):
+                self.texture_change_time += delta_time
+                if self.texture_change_time >= self.texture_change_delay:
+                    self.texture_change_time = 0
+                    self.current_texture += 1
+                    if self.state == 'attack_1':
+                        textures = self.attack_1_textures
+                    else:
+                        textures = self.attack_2_textures
+                    if self.current_texture >= len(textures):
+                        if self.state.startswith('attack_'):
+                            self.state = 'idle'
+                            self.current_texture = 0
+                        return
+                    if self.face_direction == FaceDirection.RIGHT:
+                        self.texture = textures[self.current_texture]
+                    else:
+                        self.texture = textures[self.current_texture].flip_horizontally()
+            elif self.state == 'running':
+                self.texture_change_time += delta_time
+                if self.texture_change_time >= self.texture_change_delay:
+                    self.texture_change_time = 0
+                    self.current_texture += 1
+                    if self.current_texture >= len(self.run_textures):
                         self.current_texture = 0
-                    return
-                if self.face_direction == FaceDirection.RIGHT:
-                    self.texture = textures[self.current_texture]
-                else:
-                    self.texture = textures[self.current_texture].flip_horizontally()
-        elif self.state == 'running':
-            self.texture_change_time += delta_time
-            if self.texture_change_time >= self.texture_change_delay:
-                self.texture_change_time = 0
-                self.current_texture += 1
-                if self.current_texture >= len(self.run_textures):
-                    self.current_texture = 0
-                if self.face_direction == FaceDirection.RIGHT:
-                    self.texture = self.run_textures[self.current_texture]
-                elif self.face_direction == FaceDirection.LEFT:
-                    self.texture = self.run_textures[self.current_texture].flip_horizontally()
-        elif self.state == 'jumping':
-            self.texture_change_time += delta_time
-            if self.texture_change_time >= self.texture_change_delay:
-                self.texture_change_time = 0
-                self.current_texture += 1
-                if self.current_texture >= len(self.jumping_textures):
-                    self.current_texture = 0
-                if self.face_direction == FaceDirection.RIGHT:
-                    self.texture = self.jumping_textures[self.current_texture]
-                elif self.face_direction == FaceDirection.LEFT:
-                    self.texture = self.jumping_textures[self.current_texture].flip_horizontally()
+                    if self.face_direction == FaceDirection.RIGHT:
+                        self.texture = self.run_textures[self.current_texture]
+                    elif self.face_direction == FaceDirection.LEFT:
+                        self.texture = self.run_textures[self.current_texture].flip_horizontally()
+            elif self.state == 'jumping':
+                self.texture_change_time += delta_time
+                if self.texture_change_time >= self.texture_change_delay:
+                    self.texture_change_time = 0
+                    self.current_texture += 1
+                    if self.current_texture >= len(self.jumping_textures):
+                        self.current_texture = 0
+                    if self.face_direction == FaceDirection.RIGHT:
+                        self.texture = self.jumping_textures[self.current_texture]
+                    elif self.face_direction == FaceDirection.LEFT:
+                        self.texture = self.jumping_textures[self.current_texture].flip_horizontally()
 
     def update(self, delta_time):
-        for hazard in self.game_view.hazards:
-            if (abs(hazard.top - self.bottom) < 10 and
-                    self.center_x - 10 < hazard.center_x < self.center_x + 10):
-                self.current_health -= 1
+        if not self.is_visible:
+            return
+        self.engine.update()
+
+        self.health_text.x, self.health_text.y = self.center_x, self.center_y + 70
+        self.hazards_check_timer += delta_time
+        if self.hazards_check_timer >= self.hazards_check_interval:
+            self.hazards_check_timer = 0
+            self.is_check_hazards = True
+        if self.is_check_hazards:
+            self.is_check_hazards = False
+            if arcade.check_for_collision_with_list(self, self.game_view.hazards):
+                self.current_health -= 3
         self.reload_timer -= delta_time
         if self.reload_timer <= 0:
             self.can_attack = True
             self.reload_timer = self.reload_time
         self.check_timer += delta_time
-        distance = arcade.get_distance_between_sprites(self, self.player_reference)
+        dx = self.player_reference.center_x - self.center_x
+        dy = self.player_reference.center_y - self.center_y
+        distance_squared = dx * dx + dy * dy
         direction = self.get_stable_direction()
 
         if self.state == 'jumping':
@@ -1561,7 +1596,8 @@ class Enemy_swordsman(arcade.Sprite):
                 self.player_reference.invincible = True
                 self.player_reference.invincible_timer = 1.0
             return
-        if distance <= self.detection_radius and abs(self.player_reference.center_y - self.center_y) <= self.height_dif:
+        if (distance_squared <= self.detection_radius_squared and abs(self.player_reference.center_y - self.center_y)
+                <= self.height_dif):
             if (self.state != 'jumping' and abs(self.center_x - self.player_reference.center_x) <= self.radius_of_attack
                     and abs(self.center_y - self.player_reference.center_y) <= 20):
                 if self.can_attack:
@@ -1581,6 +1617,7 @@ class Enemy_swordsman(arcade.Sprite):
 
         if self.state == 'idle':
             self.change_x = 0
+            return
 
         elif self.state == 'jumping':
             self.jump_timer += delta_time
@@ -1591,23 +1628,21 @@ class Enemy_swordsman(arcade.Sprite):
                     self.state = 'running'
                     self.has_jumped = False
                     self.jump_timer = 0
+            return
         elif self.state == 'running':
             if direction != 0:
                 self.face_direction = FaceDirection.RIGHT if direction == 1 else FaceDirection.LEFT
                 self.change_x = self.speed * direction
             else:
                 self.change_x = 0
-        self.engine.update()
-        self.health_text = arcade.Text(f'{self.current_health}', self.center_x, self.center_y + 70,
-                                       arcade.color.RED, batch=self.batch, font_size=24)
+            return
 
     def define_state(self, direction):
         if self.state == 'jumping':
             return
-        is_there_a_wall = arcade.has_line_of_sight(observer=(self.center_x, self.center_y),
-                                                   target=(self.center_x + direction * 70, self.center_y),
-                                                   walls=self.game_view.walls)
-        if not is_there_a_wall:
+        self.check_point.center_x = self.center_x + direction * 80
+        self.check_point.center_y = self.bottom + 10
+        if arcade.check_for_collision_with_list(self.check_point, self.game_view.walls):
             self.check_point.center_x = self.center_x + direction * 80
             self.check_point.center_y = self.bottom + self.max_height_of_wall + 10
             if not arcade.check_for_collision_with_list(self.check_point, self.game_view.walls):
@@ -1621,24 +1656,9 @@ class Enemy_swordsman(arcade.Sprite):
             else:
                 self.state = 'idle'
                 return
-        self.check_point.center_x = self.center_x + direction * 40
-        self.check_point.center_y = self.bottom - 10
-        if arcade.check_for_collision_with_list(self.check_point, self.game_view.hazards):
-            if self.current_health <= self.health * 0.33:
-                self.state = 'idle'
-                return
-            else:
-                self.state = 'running'
-                return
-
-        is_there_a_gap = arcade.has_line_of_sight(observer=(self.center_x, self.center_y),
-                                                  target=(self.center_x + direction * 210, self.bottom - 10),
-                                                  walls=self.game_view.walls)
-        self.test_gap_line_x = self.center_x + direction * 210
-        self.test_gap_line_y = self.bottom - 10
-        self.x = self.center_x
-        self.y = self.center_y
-        if is_there_a_gap:
+        self.check_point.center_x = self.center_x + direction * 210
+        self.check_point.center_y = self.bottom - 20
+        if not arcade.check_for_collision_with_list(self.check_point, self.game_view.walls):
             self.check_point.center_x = self.center_x + direction * self.max_width_of_gap + 70
             self.check_point.center_y = self.bottom - 10
             if not arcade.check_for_collision_with_list(self.check_point, self.game_view.walls):
@@ -1648,8 +1668,16 @@ class Enemy_swordsman(arcade.Sprite):
             else:
                 self.state = 'idle'
                 return
+        self.check_point.center_x = self.center_x + direction * 40
+        self.check_point.center_y = self.bottom + 10
+        if arcade.check_for_collision_with_list(self.check_point, self.game_view.hazards):
+            if self.current_health <= self.health * 0.33:
+                self.state = 'idle'
+                return
+            else:
+                self.state = 'running'
+                return
         self.state = 'running'
-
 
     def get_stable_direction(self):
         dx = self.player_reference.center_x - self.center_x
@@ -1665,7 +1693,6 @@ class Enemy_swordsman(arcade.Sprite):
     def execute_jump(self, direction):
         self.has_jumped = True
         self.is_jumping_now = True
-
         if self.jump_type == 'wall':
             self.change_x = self.wall_horizontal_jump_power * direction
             self.change_y = self.jump_speed
